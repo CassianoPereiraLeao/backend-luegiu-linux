@@ -1,48 +1,36 @@
 CC = gcc
 CFLAGS = -g
-NASM = nasm
-NASM_FLAGS = -f win64
-LINKER = gcc
-LINKER_FLAGS = -nostartfiles -e start
 
-COMPILADOR = ./out/luegiu.exe
-FONTE_LUEGIU = ./uses/main.luegiu
-ASSEMBLY = ./out/out.asm
-OBJETO = ./out/output.obj
-EXECUTAVEL_FINAL = ./out/programa.exe
-SOURCES = ./*.c ./arena/*.c ./diagnostics/*.c ./lex/*.c
+NASM = nasm
+NASMFLAGS = -f elf64
+
+LD = gcc
+LDFLAGS = -nostartfiles -e start
+
+COMPILADOR = ./out/luegiu
+FONTE = ./uses/main.luegiu
+ASM = ./out/out.asm
+OBJ = ./out/output.o
+PROGRAMA = ./out/programa
+
+SOURCES = $(wildcard *.c arena/*.c diagnostics/*.c lex/*.c)
 
 all: build run assemble link execute
 
 build:
-	$(CC) $(CFLAGS) ${SOURCES} -o $(COMPILADOR)
+	$(CC) $(CFLAGS) $(SOURCES) -o $(COMPILADOR)
 
 run:
-	$(COMPILADOR) $(FONTE_LUEGIU) $(ASSEMBLY)
+	$(COMPILADOR) $(FONTE) $(ASM)
 
 assemble:
-	$(NASM) $(NASM_FLAGS) $(ASSEMBLY) -o $(OBJETO)
+	$(NASM) $(NASMFLAGS) $(ASM) -o $(OBJ)
 
 link:
-	$(LINKER) $(LINKER_FLAGS) $(OBJETO) -o $(EXECUTAVEL_FINAL)
+	$(LD) $(LDFLAGS) $(OBJ) -o $(PROGRAMA)
 
 execute:
-	$(EXECUTAVEL_FINAL) ${FONTE_LUEGIU}
-
-clean_temp:
-	@del -f $(OBJETO) $(ASSEMBLY)
+	$(PROGRAMA)
 
 clean:
-	@del -f $(COMPILADOR) $(OBJETO) $(ASSEMBLY) $(EXECUTAVEL_FINAL)
-
-parse:
-	${CC} -g ./*.c -o ./out.exe
-
-lex:
-	${CC} -g ./*.c -o ./out.exe
-
-test-parse:
-	./out.exe -parse ${FONTE_LUEGIU}
-
-test-lex:
-	./out.exe -lex ${FONTE_LUEGIU}
+	rm -f $(COMPILADOR) $(OBJ) $(ASM) $(PROGRAMA)
