@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../common.h"
+#include "../diagnostics/diagnostics.h"
 
 bool isnumeric(char c);
 bool ishexa(char c);

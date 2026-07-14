@@ -1,6 +1,6 @@
 section .data
-    msg db "Hello NASM!", 10, 0
-    len equ $ - msg
+    msg1 db "Para o teste final tente essa string completamente enorme e gigantesca", 10, 0
+    msg2 db "Para outro teste supremamente supremo supremado, vamo com essa string", 10, 0
 
 section .bss
 
@@ -8,23 +8,37 @@ section .text
     global start
 
 start:
-    mov r8, 0
-    jmp .loop
+    lea rdi, [rel msg1]
+    call .printf
+    lea rdi, [rel msg2]
+    call .printf
+    jmp .exit
 
-.print:
+.printf:
+    call .strlen
+    mov rdx, rax
+    mov rsi, rdi
     mov rax, 1
     mov rdi, 1
-    lea rsi, [rel msg]
-    lea rdx, len
     syscall
     ret
 
-.loop:
-    cmp r8, 10
-    je .exit
-    add r8, 1
-    call .print
+.strlen:
+    mov rax, rdi
+    xor rcx, rcx
     jmp .loop
+
+.loop:
+    mov bl, [rax]
+    cmp bl, 0
+    je .strlen_exit
+    add rcx, 1
+    add rax, 1
+    jmp .loop
+
+.strlen_exit:
+    mov rax, rcx
+    ret
 
 .exit:
     mov rax, 60

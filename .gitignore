@@ -1,0 +1,4 @@
+*.asm
+*.obj
+debug/
+out/

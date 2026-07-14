@@ -1,0 +1,3 @@
+link start(int argc, char** argv) {
+    call 0x01;
+}
