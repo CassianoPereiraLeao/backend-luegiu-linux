@@ -251,6 +251,11 @@ Token next_token(Lexer *lexer) {
             return create_token(lexer, OP_MINUS_MINUS, line, col);
         }
 
+        if(peek(lexer) == '>') {
+            advance(lexer);
+            return create_token(lexer, OP_ARROW, line, col);
+        }
+
         return create_token(lexer, OP_MINUS, line, col);
     }
     case '>': {

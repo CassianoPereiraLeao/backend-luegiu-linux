@@ -63,6 +63,10 @@ void out_lexer(const char* path) {
         case KINT16:                    fprintf(out, "KINT16              "); break;
         case KINT32:                    fprintf(out, "KINT32              "); break;
         case KINT64:                    fprintf(out, "KINT64              "); break;
+        case KUINT8:                    fprintf(out, "KUINT8              "); break;
+        case KUINT16:                   fprintf(out, "KUINT16             "); break;
+        case KUINT32:                   fprintf(out, "KUINT32             "); break;
+        case KUINT64:                   fprintf(out, "KUINT64             "); break;
         case KBIG:                      fprintf(out, "KBIG                "); break;
         case KSMALL:                    fprintf(out, "KSMALL              "); break;
         case KCALL:                     fprintf(out, "KCALL               "); break;
@@ -91,6 +95,10 @@ void out_lexer(const char* path) {
         case KLINK:                     fprintf(out, "KLINK               "); break;
         case OP_ASSIGN:                 fprintf(out, "OP_ASSIGN           "); break;
         case OP_EQUALS:                 fprintf(out, "OP_EQUALS           "); break;
+        case OP_STAR:                   fprintf(out, "OP_STAR             "); break;
+        case OP_MINUS:                  fprintf(out, "OP_MINUS            "); break;
+        case OP_GT:                     fprintf(out, "OP_GT               "); break;
+        case OP_ARROW:                  fprintf(out, "OP_ARROW            "); break;
         default: break;
         }
         fprintf(out, "| Lexema: %.*s   ", (int)type.value.len, type.value.start);
