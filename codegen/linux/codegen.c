@@ -6,6 +6,7 @@
 
 static int type_bytes_size(TypecheckType type) {
     if(type.ptr_lvl > 0) return 8;
+    if(type.is_vla) return 8;
     if(type.inline_def != NULL) return (int)type.inline_def->size;
     switch (type.base)
     {
@@ -250,7 +251,7 @@ static void emit_instruction(CodegenContext *ctx, IrInstruction instruction) {
         if(instruction.aux != 0) fprintf(out, "mov %s, [rax%+d]", register_name(REG_RCX, width), instruction.aux);
         else fprintf(out, "mov %s, [rax]", register_name(REG_RCX, width));
         NL;
-        SPACES; emit_store(out, ctx, REG_RAX, instruction.dest); NL;
+        SPACES; emit_store(out, ctx, REG_RCX, instruction.dest); NL;
         return;
     }
 
@@ -396,6 +397,33 @@ static void emit_instruction(CodegenContext *ctx, IrInstruction instruction) {
         if(instruction.src1.kind == IR_VAL_BUILTIN) { SPACES; fprintf(out, "call __syscall_builtin"); NL; }
         else { SPACES; fprintf(out, "call Lfunc%d", instruction.src1.as.func_id); NL;}
         SPACES; emit_store(out, ctx, REG_RAX, instruction.dest); NL;
+        return;
+    }
+
+    case IR_ALLOCA: {
+        int width = compute_width(instruction.src1.type);
+        SPACES; emit_load(out, ctx, instruction.src1, REG_RAX, width);
+        SPACESNL; fprintf(out, "add rax, 15"); NL;
+        SPACES; fprintf(out, "and rax, -16"); NL;
+        SPACES; fprintf(out, "sub rsp, rax"); NL;
+        SPACES; fprintf(out, "mov ");
+        emit_value_as_operand(out, ctx, instruction.dest);
+        fprintf(out, ", rsp"); NL;
+        return;
+    }
+
+    case IR_STACK_SAVE: {
+        SPACES; fprintf(out, "mov ");
+        emit_value_as_operand(out, ctx, instruction.dest);
+        fprintf(out, ", rsp"); NL;
+        return;
+    }
+
+    case IR_STACK_RESTORE: {
+        SPACES; fprintf(out, "mov rsp, ");
+        emit_value_as_operand(out, ctx, instruction.src1);
+        NL;
+        return;
     }
 
     default:

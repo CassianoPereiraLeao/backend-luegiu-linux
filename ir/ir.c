@@ -1,5 +1,24 @@
 #include "ir.h"
 
+static size_t primitive_size(TokenType type) {
+    switch (type)
+    {
+    case KINT8: case KUINT8: case KCHAR: return 1;
+    case KINT16: case KUINT16: case KUTFCHAR: return 2;
+    case KINT32: case KUINT32: case KFLOAT: return 4;
+    case KINT64: case KUINT64: case KDOUBLE: case KHEXA: case KLINK: return 8;
+    default: return 8;
+    }
+}
+
+static size_t sizeof_type_ir(TypecheckType type) {
+    if(type.ptr_lvl > 0) return 8;
+    if(type.is_vla) return 8;
+    if(type.inline_def != NULL) return type.inline_def->size;
+
+    return primitive_size(type.base);
+}
+
 static void list_push(Arena *arena, IrInstructionList *list, IrInstruction instruction) {
     if(list->count >= list->capacity) {
         size_t new_cap = list->capacity == 0 ? 16 : list->capacity * 2;
@@ -76,6 +95,26 @@ static int scope_declare(IrGenContext *ctx, View name, TypecheckType type) {
     entry->name = name;
     entry->slot_id = slot;
     entry->type = type;
+    entry->is_array = false;
+    entry->dim_count = 0;
+    entry->dim_strides = NULL;
+    entry->next = ctx->current_scope->buckets[hash];
+    ctx->current_scope->buckets[hash] = entry;
+
+    return slot;
+}
+
+static int scope_declare_array(IrGenContext *ctx, View name, TypecheckType type, size_t dim_count, IrValue* strides) {
+    int slot = ctx->next_slot++;
+    uint64_t hash = hash_view(name) & (IR_SCOPE_TABLE_SIZE - 1);
+
+    IrSlotEntry* entry = (IrSlotEntry*)arena_alloc(ctx->arena, sizeof(IrSlotEntry));
+    entry->name = name;
+    entry->slot_id = slot;
+    entry->type = type;
+    entry->is_array = true;
+    entry->dim_count = dim_count;
+    entry->dim_strides = strides;
     entry->next = ctx->current_scope->buckets[hash];
     ctx->current_scope->buckets[hash] = entry;
 
@@ -336,11 +375,16 @@ static IrValue gen_func_call(IrGenContext *ctx, Node *node) {
         list_push(ctx->arena, &ctx->instructions, instruction);
     }
 
+    IrValue* reg_arg_value = (IrValue*)arena_alloc(ctx->arena, sizeof(IrValue) * (reg_count > 0 ? reg_count : 1));
+
     for(size_t i = 0; i < reg_count; ++i) {
-        IrValue arg_value = gen_expr(ctx, args->items[i]);
+        reg_arg_value[i] = gen_expr(ctx, args->items[i]);
+    }
+
+    for(size_t i = 0; i < reg_count; ++i) {
         IrInstruction instruction = { 0 };
         instruction.op = IR_ARG;
-        instruction.src1 = arg_value;
+        instruction.src1 = reg_arg_value[i];
         instruction.aux = (int)i;
         list_push(ctx->arena, &ctx->instructions, instruction);
     }
@@ -370,6 +414,77 @@ static IrValue gen_enum_access(Node *node) {
     return value;
 }
 
+static IrValue gen_array_index(IrGenContext *ctx, Node *node) {
+    Node* indexes[MAX_ARRAY_DIMENTIONS] = { 0 };
+    size_t depth = 0;
+
+    Node* current = node;
+    while(current->kind == NODE_ARRAY && depth < MAX_ARRAY_DIMENTIONS) {
+        indexes[depth++] = current->ast.binary_operator.right;
+        current = current->ast.binary_operator.left;
+    }
+
+    IrValue address = { 0 };
+
+    if(current->kind == NODE_VAR_ACCESS) {
+        IrSlotEntry* entry = scope_lookup(ctx, current->ast.access_variable.name);
+        address.kind = IR_VAL_SLOT;
+        address.as.slot_id = entry ? entry->slot_id : -1;
+        address.type = current->resolved_type;
+        address.field_offset = 0;
+
+        for(size_t dimention = 0; dimention < depth; ++dimention) {
+            IrValue index_value = gen_expr(ctx, indexes[depth - 1 - dimention]);
+            IrValue stride = { 0 };
+
+            if(entry && entry->is_array && dimention < entry->dim_count) {
+                stride = entry->dim_strides[dimention];
+            } else {
+                TypecheckType pointer = entry ? entry->type : current->resolved_type;
+                if(pointer.ptr_lvl > 0) pointer.ptr_lvl--;
+
+                IrValue elem_size = { 0 };
+                elem_size.kind = IR_VAL_CONST_INT;
+                elem_size.as.const_i = (long long)sizeof_type_ir(pointer);
+                stride = elem_size;
+            }
+
+            TypecheckType ptr_type = { 0 };
+            ptr_type.ptr_lvl = 1;
+
+            IrValue offset = new_temp(ctx, ptr_type);
+            emit(ctx, IR_MUL, offset, index_value, stride, 0);
+
+            IrValue new_address = new_temp(ctx, ptr_type);
+            emit(ctx, IR_ADD, new_address, address, offset, 0);
+            address = new_address;
+        }
+    } else {
+        address = gen_expr(ctx, current);
+        for(size_t dimention = 0; dimention < depth; ++dimention) {
+            IrValue index_value = gen_expr(ctx, indexes[depth - 1 - dimention]);
+
+            IrValue elem_size = { 0 };
+            elem_size.kind = IR_VAL_CONST_INT;
+            elem_size.as.const_i = (long long)sizeof_type_ir(node->resolved_type);
+
+            TypecheckType ptr_type = { 0 };
+            ptr_type.ptr_lvl = 1;
+
+            IrValue offset = new_temp(ctx, ptr_type);
+            emit(ctx, IR_MUL, offset, index_value, elem_size, 0);
+
+            IrValue new_address = new_temp(ctx, ptr_type);
+            emit(ctx, IR_ADD, new_address, address, offset, 0);
+            address = new_address;
+        }
+    }
+
+    IrValue dest = new_temp(ctx, node->resolved_type);
+    emit(ctx, IR_LOAD_INDIRECT, dest, address, none_value(), 0);
+    return dest;
+}
+
 static IrValue gen_expr(IrGenContext *ctx, Node *node) {
     switch (node->kind)
     {
@@ -381,6 +496,7 @@ static IrValue gen_expr(IrGenContext *ctx, Node *node) {
     case NODE_FUNC_CALL: return gen_func_call(ctx, node);
     case NODE_ENUM_ACCESS: return gen_enum_access(node);
     case NODE_FIELD_ACCESS: return gen_field_access(ctx, node);
+    case NODE_ARRAY: return gen_array_index(ctx, node);
     default: break;
     }
 
@@ -400,8 +516,61 @@ static void gen_call_stmt(IrGenContext *ctx, Node *node) {
     }
 }
 
+static void gen_array_decl(IrGenContext *ctx, Node *node) {
+    TypeSpec* spec = &node->ast.decl_variable.type;
+    size_t n = spec->array_dim_count;
+
+    IrValue* dimention_values = (IrValue*)arena_alloc(ctx->arena, sizeof(IrValue) * n);
+    for(size_t i = 0; i < n; ++i) {
+        dimention_values[i] = gen_expr(ctx, spec->array_dims[i]);
+    }
+
+    TypecheckType elem_type = node->resolved_type;
+    elem_type.is_array = false;
+    elem_type.is_vla = false;
+
+    IrValue elem_size = { 0 };
+    elem_size.kind = IR_VAL_CONST_INT;
+    elem_size.as.const_i = (long long)sizeof_type_ir(elem_type);
+
+    IrValue* strides = (IrValue*)arena_alloc(ctx->arena, sizeof(IrValue) * n);
+    strides[n - 1] = elem_size;
+
+    for(size_t i = n - 1; i > 0; --i) {
+        IrValue stride = new_temp(ctx, node->resolved_type);
+        emit(ctx, IR_MUL, stride, strides[i + 1], dimention_values[i + 1], 0);
+        strides[i] = stride;
+    }
+
+    IrValue total_bytes = new_temp(ctx, node->resolved_type);
+    emit(ctx, IR_MUL, total_bytes, strides[0], dimention_values[0], 0);
+
+    int slot = scope_declare_array(ctx, node->ast.decl_variable.name, node->resolved_type, n, strides);
+
+    IrValue ptr_dest = { 0 };
+    ptr_dest.kind = IR_VAL_SLOT;
+    ptr_dest.as.slot_id = slot;
+    ptr_dest.type = node->resolved_type;
+
+    emit(ctx, IR_SLOT_DECL, ptr_dest, none_value(), none_value(), 0);
+    emit(ctx, IR_ALLOCA, ptr_dest, total_bytes, none_value(), 0);
+}
+
 static void gen_var_decl(IrGenContext *ctx, Node *node) {
+    if(node->ast.decl_variable.type.is_array) {
+        gen_array_decl(ctx, node);
+        return;
+    }
+
     int slot = scope_declare(ctx, node->ast.decl_variable.name, node->resolved_type);
+
+    if(node->resolved_type.inline_def != NULL) {
+        IrValue slot_value = { 0 };
+        slot_value.kind = IR_VAL_SLOT;
+        slot_value.as.slot_id = slot;
+        slot_value.type = node->resolved_type;
+        emit(ctx, IR_SLOT_DECL, slot_value, none_value(), none_value(), 0);
+    }
 
     if(node->ast.decl_variable.init) {
         IrValue value = gen_expr(ctx, node->ast.decl_variable.init);
@@ -444,13 +613,39 @@ static void gen_if_stmt(IrGenContext *ctx, Node *node) {
     emit(ctx, IR_LABEL, label_end_def, none_value(), none_value(), 0);
 }
 
+static bool decl_is_vla(Node *stmt) {
+    if(stmt->kind != NODE_VAR_DECL) return false;
+    return stmt->resolved_type.is_array && stmt->resolved_type.is_vla;
+}
+
+static bool block_has_vla(NodeList *statements) {
+    for(size_t i = 0; i < statements->count; ++i) {
+        if(decl_is_vla(statements->items[i])) return true;
+    }
+
+    return false;
+}
+
 static void gen_block(IrGenContext *ctx, Node *node) { 
     scope_push(ctx);
 
     NodeList* statements = node->ast.program.statements;
+    bool has_vla = block_has_vla(statements);
+
+    IrValue saved = { 0 };
+    if(has_vla) {
+        TypecheckType ptr_type = { 0 };
+        ptr_type.ptr_lvl = 1;
+        saved = new_temp(ctx, ptr_type);
+        emit(ctx, IR_STACK_SAVE, saved, none_value(), none_value(), 0);
+    }
 
     for(size_t i = 0; i < statements->count; ++i) {
         gen_stmt(ctx, statements->items[i]);
+    }
+
+    if(has_vla) {
+        emit(ctx, IR_STACK_RESTORE, none_value(), saved, none_value(), 0);
     }
 
     scope_pop(ctx);

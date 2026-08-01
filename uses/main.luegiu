@@ -4,9 +4,11 @@ enum ExitCodes {
     EXIT_FAILURE
 };
 
-enum SYSCALL_TYPE {
+enum SYS {
     SYS_READ,
-    SYS_WRITE
+    SYS_WRITE,
+    SYS_OPEN,
+    SYS_CLOSE
 };
 
 enum FDs {
@@ -20,8 +22,8 @@ data Code {
     char* str;
 };
 
-static void write(int64 fd, const char* buffer, uint64 len) {
-    __syscall_builtin(1, fd, buffer, len, 0, 0, 0);
+static void write(SYS syscall, FDs fd, const char* buffer, uint64 len) {
+    __syscall_builtin(syscall, fd, buffer, len, 0, 0, 0);
 }
 
 static uint64 strlen(const char* str) {
@@ -41,10 +43,10 @@ static link end(uint8 code) {
 static link start(uint32 argc, char** argv) {
     data Code ok;
 
-    ok.code = FD:<STDOUT;
     ok.str = "ok\n";
+    ok.code = 0;
 
-    write(1, ok.str, strlen(ok.str));
+    write(SYS:<SYS_WRITE, FDs:<STDOUT, ok.str, strlen(ok.str));
 
     call end(ok.code);
 }

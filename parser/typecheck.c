@@ -213,8 +213,9 @@ static AggregateDef* compute_aggregate_layout(CheckContext *ctx, Node *node) {
 
         if(node->kind == NODE_DATA) {
             size_t field_align = field_size;
-            def->fields[i].offset = running_offset;
-            running_offset = alignup(running_offset, field_align);
+            size_t aligned_offset = alignup(running_offset, field_align);
+            def->fields[i].offset = aligned_offset;
+            running_offset = aligned_offset + field_size;
         } else {
             def->fields[i].offset = 0;
             if(field_size > max_size) max_size = field_size;
@@ -528,7 +529,7 @@ static TypecheckType check_var_access(CheckContext *ctx, Node *node) {
 }
 
 static bool is_lvalue(Node *node) {
-    return node->kind == NODE_VAR_ACCESS || node->kind == NODE_ARRAY;
+    return node->kind == NODE_VAR_ACCESS || node->kind == NODE_ARRAY || node->kind == NODE_FIELD_ACCESS;
 }
 
 static bool is_arith_compound_op(TokenType op) {
@@ -549,8 +550,31 @@ static bool is_bitwise_compound_op(TokenType op) {
     }
 }
 
+static void apply_array_info(TypecheckType *type, TypeSpec spec) {
+    type->is_array = spec.is_array;
+    type->is_vla = false;
+    type->array_size = 0;
+
+    if(!spec.is_array) return;
+
+    for(size_t i = 0; i < spec.array_dim_count; ++i) {
+        if(spec.array_dims[i] == NULL || spec.array_dims[i]->kind != NODE_LITERAL) {
+            type->is_vla = true;
+            break;
+        }
+    }
+
+    if(!type->is_vla && spec.array_dim_count > 0 && spec.array_dims[0] != NULL) {
+        type->array_size = (size_t)spec.array_dims[0]->ast.literals.integer64;
+    }
+}
+
 static TypecheckType resolve_type_spec(CheckContext *ctx, TypeSpec spec) {
-    if(spec.base != IDENTIFIER) return make_type(spec.base, spec.ptr_lvl);
+    if(spec.base != IDENTIFIER) {
+        TypecheckType type = make_type(spec.base, spec.ptr_lvl);
+        apply_array_info(&type, spec);
+        return type;
+    }
 
     if(spec.nested) {
         AggregateDef* def = compute_aggregate_layout(ctx, spec.nested);
@@ -562,15 +586,17 @@ static TypecheckType resolve_type_spec(CheckContext *ctx, TypeSpec spec) {
             type.custom_name = spec.nested->ast.aggregate.name;
         }
 
+        apply_array_info(&type, spec);
         return type;
     }
 
     TypeEntry* entry = type_table_lookup(ctx, spec.name);
     if(!entry) return type_error();
-    
+
     if(entry->kind == TYPE_ENTRY_ALIAS) {
         TypecheckType type = entry->alias;
         type.ptr_lvl += spec.ptr_lvl;
+        apply_array_info(&type, spec);
         return type;
     }
 
@@ -581,6 +607,7 @@ static TypecheckType resolve_type_spec(CheckContext *ctx, TypeSpec spec) {
         type.inline_def = &entry->aggregate;
     }
 
+    apply_array_info(&type, spec);
     return type;
 }
 
@@ -743,6 +770,7 @@ static TypecheckType check_binary_op(CheckContext *ctx, Node *node) {
         report_assignable(ctx, right_t, left_t, right, node);
         return left_t;
     }
+
     default:
         if(is_arith_compound_op(op)) {
             if(!is_lvalue(left)) {
@@ -813,7 +841,7 @@ static TypecheckType check_array(CheckContext *ctx, Node *node) {
         return type_error();
     }
 
-    TypecheckType result = { 0 };
+    TypecheckType result = base;
     result.ptr_lvl--;
     return result;
 }
@@ -885,12 +913,52 @@ static TypecheckType check_expr(CheckContext *ctx, Node *node) {
     return result;
 }
 
+static bool typespec_has_vla(TypeSpec *spec) {
+    for(size_t i = 0; i < spec->array_dim_count; ++i) {
+        if(spec->array_dims[i] && spec->array_dims[i]->kind != NODE_LITERAL) return true;
+    }
+    return false;
+}
+
 static void check_var_decl(CheckContext *ctx, Node *node) {
     View name = node->ast.decl_variable.name;
 
     if(scope_find_local(ctx->current_scope, name)) {
         diag_error(ctx->context, node->filename, node->line, node->col,
             "variavel '%.*s' ja declarada neste escopo", (int)name.len, name.start);
+    }
+
+    TypeSpec* spec = &node->ast.decl_variable.type;
+    if(spec->is_array) {
+        for(size_t i = 0; i < spec->array_dim_count; ++i) {
+            Node* dimention = spec->array_dims[i];
+
+            if(dimention == NULL) {
+                if(i != 0) {
+                    diag_error(ctx->context, node->filename, node->line, node->col,
+                        "somente a primeira dimensao do array pode ser omitida");
+                }
+                continue;
+            }
+
+            TypecheckType dimention_type = check_expr(ctx, dimention);
+            if(!is_integer_base(dimention_type.base)) {
+                diag_error(ctx->context, node->filename, node->line, node->col,
+                    "tamanho de array deve ser um inteiro");
+            }
+        }
+
+        if(typespec_has_vla(spec)) {
+            if(node->ast.decl_variable.stattic) {
+                diag_error(ctx->context, node->filename, node->line, node->col,
+                    "array de tamanho variavel nao pode ser 'static'");
+            }
+
+            if(!ctx->in_function) {
+                diag_error(ctx->context, node->filename, node->line, node->col,
+                    "array de tamanho variavel so e permitido dentro de funcoes");
+            }
+        }
     }
 
     TypecheckType declared = resolve_type_spec(ctx, node->ast.decl_variable.type);
@@ -1107,6 +1175,7 @@ static void check_stmt(CheckContext *ctx, Node *node) {
     case NODE_FUNC_CALL: check_func_call(ctx, node); break;
     case NODE_DATA:
     case NODE_COPERATE: check_aggregate_decl(ctx, node); break;
+    case NODE_BINARY_OP: check_expr(ctx, node); break;
     case NODE_NEWTYPE: check_newtype_decl(ctx, node); break;
     case NODE_ENUM: check_enum_decl(ctx, node); break;
     case NODE_FIELD_ACCESS: check_field_access(ctx, node); break;

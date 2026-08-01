@@ -541,6 +541,36 @@ static Node* parse_field_decl(Parser *parser) {
     return node;
 }
 
+static TypeSpec parse_array_suffix(Parser *parser, TypeSpec base) {
+    Node* dims[MAX_ARRAY_DIMENTIONS] = { 0 };
+    size_t count = 0;
+
+    while(match(parser, OPEN_BRACKET)) {
+        if(count >= MAX_ARRAY_DIMENTIONS) {
+            diag_error(parser->context, peekprev(parser).filename, peekprev(parser).line, peekprev(parser).col,
+                "numero maximo de dimensoes de array excedido");
+            break;
+        }
+
+        if(peek(parser).type == CLOSE_BRACKET) {
+            dims[count++] = NULL;
+        } else {
+            dims[count++] = parse_expr(parser);
+        }
+
+        expected(parser, CLOSE_BRACKET, "Esperava ']' apos o tamanho do array");
+    }
+
+    if(count > 0) {
+        base.is_array = true;
+        base.array_dim_count = count;
+        base.array_dims = (Node**)arena_alloc(parser->arena, sizeof(Node*) * count);
+        memcpy(base.array_dims, dims, sizeof(Node*) * count);
+    }
+
+    return base;
+}
+
 static Node* parse_aggregate_decl(Parser *parser, TokenType keyword, NodeKind kind, const char* key_name) {
     Token start = peek(parser);
     expected(parser, keyword, key_name);
@@ -717,6 +747,7 @@ static Node* parse_var_decl(Parser *parser, bool isstatic, bool isconst, Node *t
     node->ast.decl_variable.constant = isconst;
     node->ast.decl_variable.stattic = isstatic;
     node->ast.decl_variable.name = peekprev(parser).value;
+    node->ast.decl_variable.type = parse_array_suffix(parser, node->ast.decl_variable.type);
 
     if(match(parser, OPEN_BRACKET)) {
         node->ast.decl_variable.type.is_array = true;

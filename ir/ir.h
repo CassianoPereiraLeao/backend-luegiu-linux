@@ -17,7 +17,8 @@ typedef enum {
     IR_JMP,
     IR_JMP_IF_ZERO,
     IR_RETURN, IR_ARG, IR_CALL, IR_ARG_STACK,
-    IR_SLOT_DECL, IR_LOAD_INDIRECT, IR_STORE_INDIRECT
+    IR_SLOT_DECL, IR_LOAD_INDIRECT, IR_STORE_INDIRECT,
+    IR_ALLOCA, IR_STACK_SAVE, IR_STACK_RESTORE
 } IrOperators;
 
 typedef enum {
@@ -82,6 +83,10 @@ typedef struct IrSlotEntry {
     int slot_id;
     TypecheckType type;
     struct IrSlotEntry* next;
+
+    bool is_array;
+    size_t dim_count;
+    IrValue* dim_strides;
 } IrSlotEntry;
 
 typedef struct IrFuncIdEntry {

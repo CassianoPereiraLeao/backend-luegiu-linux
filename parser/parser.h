@@ -5,6 +5,8 @@
 #include "../lex/lex.h"
 #include "types.h"
 
+#define MAX_ARRAY_DIMENTIONS 10
+
 typedef struct NodeList NodeList;
 
 typedef enum {
@@ -46,13 +48,15 @@ typedef enum {
     STRING
 } LiteralType;
 
-
 typedef struct {
     TokenType base;
     View name;
     struct Node* nested;
     size_t ptr_lvl;
+
     bool is_array;
+    struct Node** array_dims;
+    size_t array_dim_count;
 } TypeSpec;
 
 typedef struct Node {
