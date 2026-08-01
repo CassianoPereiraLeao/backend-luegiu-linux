@@ -1,3 +1,50 @@
-link start(uint8 argc, char** argv) {
-    call 0x01; ->
+enum ExitCodes {
+    EXIT_OK,
+    EXIT_ERROR,
+    EXIT_FAILURE
+};
+
+enum SYSCALL_TYPE {
+    SYS_READ,
+    SYS_WRITE
+};
+
+enum FDs {
+    NONE,
+    STDOUT
+};
+
+data Code {
+    uint8 code;
+    uint8 coder;
+    char* str;
+};
+
+static void write(int64 fd, const char* buffer, uint64 len) {
+    __syscall_builtin(1, fd, buffer, len, 0, 0, 0);
+}
+
+static uint64 strlen(const char* str) {
+    uint64 i = 0;
+    while(str[i]) i++;
+    call i;
+}
+
+static link end(uint8 code) {
+    if(code == 0) call 0x00;
+    else if(code == 1) call 0x01;
+    else if(code < 30) call 0x14;
+
+    call 0xFF;
+}
+
+static link start(uint32 argc, char** argv) {
+    data Code ok;
+
+    ok.code = FD:<STDOUT;
+    ok.str = "ok\n";
+
+    write(1, ok.str, strlen(ok.str));
+
+    call end(ok.code);
 }

@@ -3,6 +3,7 @@
 #include "../common.h"
 #include "../arena/arena.h"
 #include "../lex/lex.h"
+#include "types.h"
 
 typedef struct NodeList NodeList;
 
@@ -15,7 +16,7 @@ typedef enum {
     NODE_FOR_LOOP,
     NODE_WHILE_LOOP,
     NODE_DO_WHILE_LOOP,
-    NODE_BREAK_SMTM,
+    NODE_BREAK_STMT,
     NODE_CONTINUE_STMT,
     NODE_CALL_STMT,
     NODE_BINARY_OP,
@@ -25,16 +26,16 @@ typedef enum {
     NODE_LITERAL,
     NODE_DATA,
     NODE_COPERATE,
+    NODE_NEWTYPE,
+    NODE_ENUM,
+    NODE_ENUM_MEMBER,
+    NODE_ENUM_ACCESS,
+    NODE_FIELD_ACCESS,
+    NODE_TYPEREF,
+    NODE_CAST,
     NODE_BLOCK,
     NODE_PROGRAM
 } NodeKind;
-
-typedef enum {
-    PRIMITIVE,
-    DATA,
-    COPERATE,
-    ENUM
-} NewType;
 
 typedef enum {
     INT,
@@ -45,12 +46,25 @@ typedef enum {
     STRING
 } LiteralType;
 
+
+typedef struct {
+    TokenType base;
+    View name;
+    struct Node* nested;
+    size_t ptr_lvl;
+    bool is_array;
+} TypeSpec;
+
 typedef struct Node {
     NodeKind kind;
     struct Node* next;
 
     size_t line;
     size_t col;
+
+    TypecheckType resolved_type;
+    int func_id;
+
     const char* filename;
     union {
         struct {
@@ -59,10 +73,25 @@ typedef struct Node {
 
         struct {
             View name;
+            NodeList* members;
+        } enum_decl;
+
+        struct {
+            View name;
+            struct Node* value;
+        } enum_member;
+
+        struct {
+            View enum_name;
+            View member_name;
+            long long resolved_type;
+        } enum_access;
+
+        struct {
+            TypeSpec type;
+            View name;
             bool constant;
             bool stattic;
-            TokenType data_type;
-            size_t ptr_lvl;
             struct Node* init;
         } decl_variable;
 
@@ -70,6 +99,24 @@ typedef struct Node {
             TokenType op;
             struct Node* operand;
         } unary_operator;
+
+        struct {
+            struct Node* condition;
+            struct Node* body;
+        } while_loop;
+
+        struct {
+            TokenType target;
+            size_t ptr_lvl;
+            struct Node* operand;
+        } cast_expr;
+
+        struct {
+            struct Node* init;
+            struct Node* condition;
+            struct Node* increment;
+            struct Node* body;
+        } for_loop;
 
         struct {
             TokenType op;
@@ -92,8 +139,7 @@ typedef struct Node {
         } if_stmt;
 
         struct {
-            TokenType call_type;
-            size_t ptr_lvl;
+            TypeSpec call_type;
             View name;
             NodeList* params;
             bool variadic;
@@ -113,17 +159,26 @@ typedef struct Node {
         struct {
             View name;
             NodeList* members;
-        } data;
+            struct Node* tailing_decl;
+        } aggregate;
+
+        struct {
+            struct Node* base;
+            View field_name;
+            bool arrow;
+            size_t field_offset;
+            TypecheckType base_type;
+        } field_access;
 
         struct {
             View name;
-            NodeList* members;
-        } coperate;
-
-        struct {
-            View name;
-            struct Node* data;
+            TypeSpec underlying;
         } newtype;
+
+        struct {
+            TokenType primitive;
+            View name;
+        } type_ref;
 
         struct {
             NodeList* statements;

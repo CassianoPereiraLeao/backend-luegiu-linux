@@ -58,7 +58,7 @@ static bool strlcompare(View string, const char* match, size_t len) {
 }
 
 bool strcompare(View string, const char* match) {
-    strlcompare(string, match, strlen(match));
+    return strlcompare(string, match, strlen(match));
 }
 
 static Token create_token(Lexer *lexer, TokenType type, size_t line, size_t col) {
@@ -95,6 +95,7 @@ static TokenType check_keyword(View view) {
         if(strcompare(view, "call")) return KCALL;
         if(strcompare(view, "void")) return KVOID;
         if(strcompare(view, "jump")) return KJUMP;
+        if(strcompare(view, "char")) return KCHAR;
         break;
     case 5:
         if(strcompare(view, "small")) return KSMALL;
@@ -376,6 +377,16 @@ Token next_token(Lexer *lexer) {
 
         return create_token(lexer, OP_BANG, line, col);
     }
+    case '=': {
+        advance(lexer);
+
+        if(peek(lexer) == '=') {
+            advance(lexer);
+            return create_token(lexer, OP_EQUALS, line, col);
+        }
+
+        return create_token(lexer, OP_ASSIGN, line, col);
+    }
     case '"': {
         advance(lexer);
 
@@ -401,12 +412,15 @@ Token next_token(Lexer *lexer) {
 
         if(peek(lexer) != '\'') return create_token(lexer, UNDEFINED, line, col);
 
+        advance(lexer);
         return create_token(lexer, CHAR_LIT, line, col);
     }
     default:
+        char bad = current;
         advance(lexer);
-        // if(lexer->context)
-        //     diag_warning(lexer->context, );
+        if(lexer->context)
+            diag_warning(lexer->context, lexer->filename, lexer->line, lexer->col,
+                "%c nao reconhecido pelo sistema", bad);
         return create_token(lexer, UNDEFINED, line, col);
     }
 }
