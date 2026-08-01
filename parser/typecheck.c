@@ -232,6 +232,16 @@ static TypecheckType type_error(void) {
     return type;
 }
 
+static TypecheckType decay_array_to_ptr(TypecheckType type) {
+    if(!type.is_array) return type;
+
+    TypecheckType decay = type;
+    decay.is_array = false;
+    decay.is_vla = false;
+    decay.ptr_lvl++;
+    return decay;
+}
+
 static bool type_is_error(TypecheckType type) {
     return type.is_error;
 }
@@ -325,6 +335,8 @@ static bool literal_overflows(Node *node, TypecheckType type) {
 
 static CompatResult check_assignable(TypecheckType from, TypecheckType to, Node *node, bool is_cast, const char** msg) {
     if(is_cast) return COMPAT_OK;
+
+    from = decay_array_to_ptr(from);
 
     if(is_link(to)) {
         if(is_link(from) || is_hexa(from) || is_ptr(from)) return COMPAT_OK;
@@ -825,6 +837,8 @@ static TypecheckType check_array(CheckContext *ctx, Node *node) {
     Node* right = node->ast.binary_operator.right;
 
     TypecheckType base = check_expr(ctx, left);
+    base = decay_array_to_ptr(base);
+
     TypecheckType index = check_expr(ctx, right);
 
     if(type_is_error(base) || type_is_error(index)) return type_error();

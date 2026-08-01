@@ -1,5 +1,7 @@
 #include "ir.h"
 
+static IrValue gen_array_address(IrGenContext *ctx, Node *node);
+
 static size_t primitive_size(TokenType type) {
     switch (type)
     {
@@ -260,6 +262,7 @@ static IrValue gen_literal(IrGenContext *ctx, Node *node) {
             case 't': c = 9; break;
             case 'r': c = 13; break;
             case '\\': c = 92; break;
+            case '0': c = 0; break;
             }
         }
 
@@ -285,7 +288,15 @@ static IrValue gen_var_access(IrGenContext *ctx, Node *node) {
     IrValue value = { 0 };
     value.kind = IR_VAL_SLOT;
     value.as.slot_id = entry ? entry->slot_id : -1;
-    value.type = node->resolved_type;
+
+    if(entry && entry->is_array) {
+        TypecheckType ptr_type = { 0 };
+        ptr_type.ptr_lvl = 1;
+        value.type = ptr_type;
+    } else {
+        value.type = node->resolved_type;
+    }
+
     return value;
 }
 
@@ -306,6 +317,19 @@ static IrValue gen_binary_op(IrGenContext *ctx, Node *node) {
             instr.aux = (int)left->ast.field_access.field_offset;
             list_push(ctx->arena, &ctx->instructions, instr);
             return src;
+        }
+
+        if(left->kind == NODE_ARRAY) {
+            IrValue address = gen_array_address(ctx, left);
+            IrValue source = gen_expr(ctx, node->ast.binary_operator.right);
+
+            IrInstruction instruction = { 0 };
+            instruction.op = IR_STORE_INDIRECT;
+            instruction.src1 = address;
+            instruction.src2 = source;
+            instruction.aux = 0;
+            list_push(ctx->arena, &ctx->instructions, instruction);
+            return source;
         }
 
         IrValue dest = gen_expr(ctx, node->ast.binary_operator.left);
@@ -414,7 +438,7 @@ static IrValue gen_enum_access(Node *node) {
     return value;
 }
 
-static IrValue gen_array_index(IrGenContext *ctx, Node *node) {
+static IrValue gen_array_address(IrGenContext *ctx, Node *node) {
     Node* indexes[MAX_ARRAY_DIMENTIONS] = { 0 };
     size_t depth = 0;
 
@@ -424,13 +448,16 @@ static IrValue gen_array_index(IrGenContext *ctx, Node *node) {
         current = current->ast.binary_operator.left;
     }
 
+    TypecheckType ptr_type = { 0 };
+    ptr_type.ptr_lvl = 1;
+
     IrValue address = { 0 };
 
     if(current->kind == NODE_VAR_ACCESS) {
         IrSlotEntry* entry = scope_lookup(ctx, current->ast.access_variable.name);
         address.kind = IR_VAL_SLOT;
         address.as.slot_id = entry ? entry->slot_id : -1;
-        address.type = current->resolved_type;
+        address.type = ptr_type;
         address.field_offset = 0;
 
         for(size_t dimention = 0; dimention < depth; ++dimention) {
@@ -449,9 +476,6 @@ static IrValue gen_array_index(IrGenContext *ctx, Node *node) {
                 stride = elem_size;
             }
 
-            TypecheckType ptr_type = { 0 };
-            ptr_type.ptr_lvl = 1;
-
             IrValue offset = new_temp(ctx, ptr_type);
             emit(ctx, IR_MUL, offset, index_value, stride, 0);
 
@@ -468,9 +492,6 @@ static IrValue gen_array_index(IrGenContext *ctx, Node *node) {
             elem_size.kind = IR_VAL_CONST_INT;
             elem_size.as.const_i = (long long)sizeof_type_ir(node->resolved_type);
 
-            TypecheckType ptr_type = { 0 };
-            ptr_type.ptr_lvl = 1;
-
             IrValue offset = new_temp(ctx, ptr_type);
             emit(ctx, IR_MUL, offset, index_value, elem_size, 0);
 
@@ -480,6 +501,11 @@ static IrValue gen_array_index(IrGenContext *ctx, Node *node) {
         }
     }
 
+    return address;
+}
+
+static IrValue gen_array_index(IrGenContext *ctx, Node *node) {
+    IrValue address = gen_array_address(ctx, node);
     IrValue dest = new_temp(ctx, node->resolved_type);
     emit(ctx, IR_LOAD_INDIRECT, dest, address, none_value(), 0);
     return dest;
@@ -533,24 +559,30 @@ static void gen_array_decl(IrGenContext *ctx, Node *node) {
     elem_size.kind = IR_VAL_CONST_INT;
     elem_size.as.const_i = (long long)sizeof_type_ir(elem_type);
 
+    TypecheckType size_type = { 0 };
+    size_type.ptr_lvl = 1;
+
     IrValue* strides = (IrValue*)arena_alloc(ctx->arena, sizeof(IrValue) * n);
     strides[n - 1] = elem_size;
 
     for(size_t i = n - 1; i > 0; --i) {
-        IrValue stride = new_temp(ctx, node->resolved_type);
+        IrValue stride = new_temp(ctx, size_type);
         emit(ctx, IR_MUL, stride, strides[i + 1], dimention_values[i + 1], 0);
         strides[i] = stride;
     }
 
-    IrValue total_bytes = new_temp(ctx, node->resolved_type);
+    IrValue total_bytes = new_temp(ctx, size_type);
     emit(ctx, IR_MUL, total_bytes, strides[0], dimention_values[0], 0);
 
     int slot = scope_declare_array(ctx, node->ast.decl_variable.name, node->resolved_type, n, strides);
 
+    TypecheckType ptr_type = { 0 };
+    ptr_type.ptr_lvl = 1;
+
     IrValue ptr_dest = { 0 };
     ptr_dest.kind = IR_VAL_SLOT;
     ptr_dest.as.slot_id = slot;
-    ptr_dest.type = node->resolved_type;
+    ptr_dest.type = ptr_type;
 
     emit(ctx, IR_SLOT_DECL, ptr_dest, none_value(), none_value(), 0);
     emit(ctx, IR_ALLOCA, ptr_dest, total_bytes, none_value(), 0);

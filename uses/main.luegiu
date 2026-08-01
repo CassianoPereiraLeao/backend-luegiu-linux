@@ -11,6 +11,13 @@ enum SYS {
     SYS_CLOSE
 };
 
+enum OpenMode {
+    READ_ONLY,
+    WRITE_ONLY,
+    READ_WRITE,
+    ACCMODE
+}
+
 enum FDs {
     NONE,
     STDOUT
@@ -23,6 +30,10 @@ data Code {
 };
 
 static void write(SYS syscall, FDs fd, const char* buffer, uint64 len) {
+    __syscall_builtin(syscall, fd, buffer, len, 0, 0, 0);
+}
+
+static void write_integer(SYS syscall, FDs fd, const char buffer, uint64 len) {
     __syscall_builtin(syscall, fd, buffer, len, 0, 0, 0);
 }
 
@@ -43,10 +54,15 @@ static link end(uint8 code) {
 static link start(uint32 argc, char** argv) {
     data Code ok;
 
-    ok.str = "ok\n";
+    char buffer[20];
+    buffer[0] = 'C';
+    buffer[1] = 'A';
+    buffer[2] = 'T';
+    buffer[3] = '\n';
+    buffer[4] = '\0';
     ok.code = 0;
 
-    write(SYS:<SYS_WRITE, FDs:<STDOUT, ok.str, strlen(ok.str));
+    write(SYS:<SYS_WRITE, FDs:<STDOUT, buffer, strlen(buffer));
 
     call end(ok.code);
 }
