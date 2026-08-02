@@ -11,10 +11,10 @@ COMPILADOR = ./out/luegiu
 FONTE = ./uses/main.luegiu
 ASM = ./out/out.asm
 OBJ = ./out/output.o
-PROGRAMA_FLAGS = -Check -Lex -Parse -Ir -Codegen
+PROGRAMA_FLAGS = -Preprocess -Lex -Parse -Check -Ir -Codegen
 PROGRAMA = ./out/program
 
-SOURCES = $(wildcard *.c arena/*.c diagnostics/*.c lex/*.c parser/*.c ir/*.c codegen/linux/*.c)
+SOURCES = $(wildcard *.c arena/*.c diagnostics/*.c lex/*.c parser/*.c ir/*.c codegen/linux/*.c preprocess/*.c)
 
 all: build run assemble link execute exec_luegiu link_luegiu run_luegiu
 

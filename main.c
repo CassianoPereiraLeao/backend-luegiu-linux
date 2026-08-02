@@ -5,6 +5,7 @@
 #include "./arena/arena.h"
 #include "./diagnostics/diagnostics.h"
 #include "./ir/ir.h"
+#include "./preprocess/preprocess.h"
 
 #ifdef _WIN32
     #include "./codegen/windows/codegen.h"
@@ -20,6 +21,7 @@ typedef struct {
     bool check;
     bool ir;
     bool codegen;
+    bool preprocess;
     const char* path;
 } CliOptions;
 
@@ -564,6 +566,45 @@ static void run_codegen_dump(IrGenContext *ctx, Arena *arena, Node *entry) {
     fclose(out);
 }
 
+static char* dirname_of(const char* path, Arena *arena) {
+    const char* last_separation = NULL;
+
+    for(const char* peek = path; *peek; ++peek) {
+        if(*peek == '/' || *peek == '\\') last_separation = peek;
+    }
+
+    if(!last_separation) {
+        char* dot = (char*)arena_alloc(arena, 2);
+        dot[0] = '.';
+        dot[1] = '\0';
+        return dot;
+    }
+
+    size_t len = last_separation - path;
+    char* dir = (char*)arena_alloc(arena, len + 1);
+    memcpy(dir, path, len);
+    dir[len] = '\0';
+    return dir;
+}
+
+static void write_preprocess_dump(const char* src, const char* expanded) {
+    FILE* out = fopen("./debug/exit.luegiu.preprocess", "wb");
+    if(!out) {
+        fprintf(stderr, "Aviso: nao foi possivel escrever './debug/exit.luegiu.preprocess': %s\n", strerror(errno));
+        return;
+    }
+
+    fprintf(out, "// src\n");
+    fprintf(out, "%s", src);
+    if(*src && src[strlen(src) - 1] != '\n') fprintf(out, "\n");
+
+    fprintf(out, "\n// expanded\n");
+    fprintf(out, "%s", expanded);
+    if(*expanded && expanded[strlen(expanded) - 1] != '\n') fprintf(out, "\n");
+
+    fclose(out);
+}
+
 static CliOptions parse_args(int argc, char* argv[]) {
     CliOptions opts = { 0 };
 
@@ -573,6 +614,7 @@ static CliOptions parse_args(int argc, char* argv[]) {
         else if(strcmp(argv[i], "-Check") == 0) opts.check = true;
         else if(strcmp(argv[i], "-Ir") == 0) opts.ir = true;
         else if(strcmp(argv[i], "-Codegen") == 0) opts.codegen = true;
+        else if(strcmp(argv[i], "-Preprocess") == 0) opts.preprocess = true;
         else if(!opts.path) opts.path = argv[i];
     }
     return opts;
@@ -582,7 +624,7 @@ int main(int argc, char* argv[]) {
     CliOptions opts = parse_args(argc, argv);
 
     if(!opts.path) {
-        fprintf(stderr, "Uso: %s [-Lex] [-Parse] [-Check] <arquivo>\n", argv[0]);
+        fprintf(stderr, "Uso: %s [-Lex] [-Parse] [-Check] [-Ir] [-Codegen] [-Preprocess] <arquivo>\n", argv[0]);
         return 1;
     }
 
@@ -595,18 +637,30 @@ int main(int argc, char* argv[]) {
     char* src = read_file(opts.path, &size);
 
     Arena arena;
-    arena_init(&arena, 1024 * 1024);
+    arena_init(&arena, MB);
+
+    char* base_dir = dirname_of(opts.path, &arena);
+    const char* lib_dir = "defaultlib";
+
+    LineMap map;
+    linemap_init(&map);
+
+    char* expanded = preprocess_source(src, base_dir, lib_dir, opts.path, &arena, &map);
+
+    if(opts.preprocess) {
+        write_preprocess_dump(src, expanded);
+    }
 
     DiagContext context;
     diag_init(&context, &arena);
     diag_set_max_errors(&context, 200);
 
     if(opts.lex) 
-        run_lex_dump(src, opts.path, &context);
+        run_lex_dump(expanded, opts.path, &context);
 
     Node* program = NULL;
     if(opts.parse || opts.check) {
-        program = run_parse(src, opts.path, &arena, &context);
+        program = run_parse(expanded, opts.path, &arena, &context);
 
         if(has_error(&context)) {
             diag_report_all(&context);

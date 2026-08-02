@@ -1,22 +1,4 @@
-enum ExitCodes {
-    EXIT_OK,
-    EXIT_ERROR,
-    EXIT_FAILURE
-};
-
-enum SYS {
-    SYS_READ,
-    SYS_WRITE,
-    SYS_OPEN,
-    SYS_CLOSE
-};
-
-enum OpenMode {
-    READ_ONLY,
-    WRITE_ONLY,
-    READ_WRITE,
-    ACCMODE
-}
+extract -> [linux/string.lh]
 
 enum FDs {
     NONE,
@@ -29,12 +11,12 @@ data Code {
     char* str;
 };
 
-static void write(SYS syscall, FDs fd, const char* buffer, uint64 len) {
-    __syscall_builtin(syscall, fd, buffer, len, 0, 0, 0);
+static void write(FDs fd, const char* buffer, uint64 len) {
+    __syscall_builtin(1, fd, buffer, len, 0, 0, 0);
 }
 
-static void write_integer(SYS syscall, FDs fd, const char buffer, uint64 len) {
-    __syscall_builtin(syscall, fd, buffer, len, 0, 0, 0);
+static void write_integer(FDs fd, const char buffer, uint64 len) {
+    __syscall_builtin(1, fd, buffer, len, 0, 0, 0);
 }
 
 static uint64 strlen(const char* str) {
@@ -52,17 +34,7 @@ static link end(uint8 code) {
 }
 
 static link start(uint32 argc, char** argv) {
-    data Code ok;
+    write(FDs:<STDOUT, TEST, TEST_LEN);
 
-    char buffer[20];
-    buffer[0] = 'C';
-    buffer[1] = 'A';
-    buffer[2] = 'T';
-    buffer[3] = '\n';
-    buffer[4] = '\0';
-    ok.code = 0;
-
-    write(SYS:<SYS_WRITE, FDs:<STDOUT, buffer, strlen(buffer));
-
-    call end(ok.code);
+    call end(0);
 }

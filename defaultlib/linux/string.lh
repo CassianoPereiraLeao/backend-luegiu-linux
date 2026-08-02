@@ -1,0 +1,24 @@
+use target -> single
+
+preprocess TEST -> "CAT\n"
+preprocess TEST_LEN -> 4
+
+enum ExitCodes {
+    EXIT_OK,
+    EXIT_ERROR,
+    EXIT_FAILURE
+};
+
+enum SYS {
+    SYS_READ,
+    SYS_WRITE,
+    SYS_OPEN,
+    SYS_CLOSE
+};
+
+enum OpenMode {
+    READ_ONLY,
+    WRITE_ONLY,
+    READ_WRITE,
+    ACCMODE
+};
