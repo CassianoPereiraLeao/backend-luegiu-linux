@@ -11,7 +11,7 @@ typedef struct {
     AggregateDef* inline_def;
     size_t ptr_lvl;
     bool is_error;
-
+    bool is_atomic;
     bool is_array;
     bool is_vla;
     size_t array_size;

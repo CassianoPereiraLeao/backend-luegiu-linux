@@ -754,12 +754,14 @@ static Node* parse_func_decl(Parser *parser, bool isstatic, bool isextern, Node 
     return node;
 }
 
-static Node* parse_var_decl(Parser *parser, bool isstatic, bool isconst, Node *type, size_t ptr_lvl) {
+static Node* parse_var_decl(Parser *parser, bool isstatic, bool isconst, bool isextern, bool isatomic, Node *type, size_t ptr_lvl) {
     Node* node = create_node_at(parser, NODE_VAR_DECL, peekprev(parser));
     node->ast.decl_variable.type = type_spec_from_node(type);
     node->ast.decl_variable.type.ptr_lvl = ptr_lvl;
     node->ast.decl_variable.constant = isconst;
     node->ast.decl_variable.stattic = isstatic;
+    node->ast.decl_variable.attomic = isatomic;
+    node->ast.decl_variable.exttern = isextern;
     node->ast.decl_variable.name = peekprev(parser).value;
     node->ast.decl_variable.type = parse_array_suffix(parser, node->ast.decl_variable.type);
 
@@ -779,6 +781,7 @@ static Node* parse_decl(Parser *parser) {
     bool is_extern = match(parser, KEXTERN);
     bool is_static = match(parser, KSTATIC);
     bool is_const = match(parser, KCONST);
+    bool is_atomic = match(parser, KATOMIC);
 
     Node *type = parse_type_specifier(parser);
 
@@ -789,7 +792,7 @@ static Node* parse_decl(Parser *parser) {
 
     if(peek(parser).type == OPEN_PAREN)
         return parse_func_decl(parser, is_static, is_extern, type, ptr_lvl);
-    return parse_var_decl(parser, is_static, is_const, type, ptr_lvl);
+    return parse_var_decl(parser, is_static, is_const, is_extern, is_atomic, type, ptr_lvl);
 }
 
 static Node* parse_if_stmt(Parser *parser) {
@@ -918,7 +921,8 @@ static Node* parse_statement(Parser *parser) {
     if(current == KCALL) return parse_call_stmt(parser);
     if(current == OPEN_BRACE) return parse_block_stmt(parser);
     if(current == KIF) return parse_if_stmt(parser);
-    if(istype(current) || current == KSTATIC || current == KCONST || current == KEXTERN) return parse_decl(parser);
+    if(istype(current) || current == KSTATIC || current == KCONST || current == KEXTERN
+        || current == KATOMIC) return parse_decl(parser);
     if(current == KWHILE) return parse_while_loop(parser);
     if(current == KFOR) return parse_for_loop(parser);
     if(current == KDATA) return parse_aggregate_decl(parser, KDATA, NODE_DATA, "data");

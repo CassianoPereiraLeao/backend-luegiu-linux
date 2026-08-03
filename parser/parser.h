@@ -96,6 +96,8 @@ typedef struct Node {
             View name;
             bool constant;
             bool stattic;
+            bool attomic;
+            bool exttern;
             struct Node* init;
         } decl_variable;
 

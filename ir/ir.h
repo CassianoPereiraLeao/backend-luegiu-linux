@@ -18,7 +18,8 @@ typedef enum {
     IR_JMP_IF_ZERO,
     IR_RETURN, IR_ARG, IR_CALL, IR_ARG_STACK,
     IR_SLOT_DECL, IR_LOAD_INDIRECT, IR_STORE_INDIRECT,
-    IR_ALLOCA, IR_STACK_SAVE, IR_STACK_RESTORE
+    IR_ALLOCA, IR_STACK_SAVE, IR_STACK_RESTORE,
+    IR_ATOMIC_ADD, IR_ATOMIC_CAS, IR_FENCE, IR_ATOMIC_AND, IR_ATOMIC_OR, IR_ATOMIC_XOR
 } IrOperators;
 
 typedef enum {
@@ -56,6 +57,7 @@ typedef struct {
     IrValue dest;
     IrValue src1;
     IrValue src2;
+    IrValue src3;
     int aux;
 } IrInstruction;
 

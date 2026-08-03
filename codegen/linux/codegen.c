@@ -25,14 +25,14 @@ static bool view_equals(View a, View b) {
 }
 
 static const char* register_name(RegFamily family, int size) {
-    static const char* table[3][4] = {
+    static const char* table[4][4] = {
         { "al", "ax", "eax", "rax" },
         { "cl", "cx", "ecx", "rcx" },
-        { "dl", "dx", "edx", "rdx" }    
+        { "dl", "dx", "edx", "rdx" },
+        { "r11b", "r11w", "r11d", "r11" }
     };
 
     int index = 0;
-
     if(size == 2) index = 1;
     else if(size == 4) index = 2;
     else if(size == 8) index = 3;
@@ -68,6 +68,7 @@ static void compute_layouts(CodegenContext *ctx, IrGenContext *ir_ctx, size_t st
         scan_value_for_layout(instruction.dest, slots, temps);
         scan_value_for_layout(instruction.src1, slots, temps);
         scan_value_for_layout(instruction.src2, slots, temps);
+        scan_value_for_layout(instruction.src3, slots, temps);
     }
 
     int offset = 0;
@@ -120,8 +121,11 @@ static const char* instruction_to_str(IrOperators op) {
     case IR_ADD: return "add";
     case IR_SUB: return "sub";
     case IR_MUL: return "imul";
+    case IR_ATOMIC_AND:
     case IR_BAND: return "and";
+    case IR_ATOMIC_OR:
     case IR_BOR: return "or";
+    case IR_ATOMIC_XOR:
     case IR_BXOR: return "xor";
     default: return NULL;
     }
@@ -432,6 +436,59 @@ static void emit_instruction(CodegenContext *ctx, IrInstruction instruction) {
         SPACES; fprintf(out, "mov rsp, ");
         emit_value_as_operand(out, ctx, instruction.src1);
         NL;
+        return;
+    }
+
+    case IR_ATOMIC_ADD: {
+        int width = compute_width(instruction.src1.type);
+        const char* cnt = register_name(REG_RCX, width);
+
+        SPACES; emit_load(out, ctx, instruction.src2, REG_RCX, width);
+        SPACESNL; fprintf(out, "lock xadd ");
+        emit_value_as_operand(out, ctx, instruction.src1);
+        fprintf(out, ", %s", cnt); NL;
+
+        if(instruction.dest.kind != IR_VAL_NONE) {
+            const char* new_cnt = register_name(REG_RAX, width);
+            SPACES; emit_load(out, ctx, instruction.src2, REG_RAX, width);
+            SPACESNL; fprintf(out, "add %s, %s", new_cnt, cnt); NL;
+            SPACES; emit_store(out, ctx, REG_RAX, instruction.dest); NL;
+        }
+        return;
+    }
+
+    case IR_ATOMIC_AND: case IR_ATOMIC_OR: case IR_ATOMIC_XOR: {
+        int width = compute_width(instruction.src1.type);
+        const char* cnt = register_name(REG_RCX, width);
+
+        SPACES; emit_load(out, ctx, instruction.src2, REG_RCX, width); NL;
+        SPACES; fprintf(out, "lock %s ", instruction_to_str(instruction.op));
+        emit_value_as_operand(out, ctx, instruction.src1);
+        fprintf(out, ", %s", cnt); NL;
+
+        if(instruction.dest.kind != IR_VAL_NONE) {
+            SPACES; emit_load(out, ctx, instruction.src1, REG_RAX, width); NL;
+            SPACES; emit_store(out, ctx, REG_RAX, instruction.dest); NL;
+        }
+        return;
+    }
+
+    case IR_FENCE: {
+        SPACES; fprintf(out, "mfence"); NL;
+        return;
+    }
+
+    case IR_ATOMIC_CAS: {
+        int width = compute_width(instruction.src2.type);
+        const char* cnt = register_name(REG_RCX, width);
+
+        SPACES; emit_load(out, ctx, instruction.src1, REG_R11, 8); NL;
+        SPACES; emit_load(out, ctx, instruction.src2, REG_RAX, width); NL;
+        SPACES; emit_load(out, ctx, instruction.src3, REG_RCX, width); NL;
+        SPACES; fprintf(out, "lock cmpxchg [r11], %s", cnt); NL;
+        SPACES; fprintf(out, "sete al"); NL;
+        SPACES; fprintf(out, "movzx eax, al"); NL;
+        SPACES; emit_store(out, ctx, REG_RAX, instruction.dest); NL;
         return;
     }
 

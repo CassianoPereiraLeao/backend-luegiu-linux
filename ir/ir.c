@@ -34,11 +34,13 @@ static void list_push(Arena *arena, IrInstructionList *list, IrInstruction instr
 }
 
 static void emit(IrGenContext *ctx, IrOperators op, IrValue dest, IrValue src1, IrValue src2, int aux) {
-    IrInstruction instruction = {
-        op, dest,
-        src1, src2, aux
-    };
-
+    IrInstruction instruction = { 0 };
+    instruction.op = op;
+    instruction.dest = dest;
+    instruction.src1 = src1;
+    instruction.src2 = src2;
+    instruction.src3 = src2;
+    instruction.aux = aux;
     list_push(ctx->arena, &ctx->instructions, instruction);
 }
 
@@ -46,6 +48,10 @@ static IrValue none_value(void) {
     IrValue value = { 0 };
     value.kind = IR_VAL_NONE;
     return value;
+}
+
+static bool value_atomic(IrValue value) {
+    return value.type.is_atomic;
 }
 
 static IrValue new_temp(IrGenContext *ctx, TypecheckType type) {
@@ -186,6 +192,14 @@ static IrOperators binop_to_ir(TokenType op) {
         case OP_BANGEQ: return IR_CMP_NE;
         default:        return IR_ADD;
     }
+}
+
+static bool is_arith_compound(TokenType op) {
+    return op == OP_PLUSEQ || op == OP_MINUSEQ;
+}
+
+static bool is_bitwise_compound(TokenType op) {
+    return op == OP_ANDEQ || op == OP_OREQ || op == OP_XOREQ;
 }
 
 static IrValue gen_expr(IrGenContext *ctx, Node *node);
@@ -338,6 +352,32 @@ static IrValue gen_binary_op(IrGenContext *ctx, Node *node) {
         return dest;
     }
 
+    if(node->ast.binary_operator.left->kind == NODE_VAR_ACCESS &&
+        (is_arith_compound(op) || is_bitwise_compound(op))) {
+
+        IrValue slot = gen_expr(ctx, node->ast.binary_operator.left);
+
+        if(value_atomic(slot)) {
+            IrValue operand = gen_expr(ctx, node->ast.binary_operator.right);
+            IrValue dest = new_temp(ctx, slot.type);
+
+            if(is_arith_compound(op)) {
+                if(op == OP_MINUSEQ) {
+                    IrValue negative = new_temp(ctx, operand.type);
+                    emit(ctx, IR_NEG, negative, operand, none_value(), 0);
+                    operand = negative;
+                }
+
+                emit(ctx, IR_ATOMIC_ADD, dest, slot, operand, 0);
+                return dest;
+            }
+
+            IrOperators atomic_op = (op == OP_ANDEQ) ? IR_ATOMIC_AND : (op == OP_OREQ) ? IR_ATOMIC_OR : IR_ATOMIC_XOR;
+            emit(ctx, atomic_op, dest, slot, operand, 0);
+            return dest;
+        }
+    }
+
     IrValue left = gen_expr(ctx, node->ast.binary_operator.left);
     IrValue right = gen_expr(ctx, node->ast.binary_operator.right);
 
@@ -362,6 +402,17 @@ static IrValue gen_unary_op(IrGenContext *ctx, Node *node) {
         return dest;
     }
     case OP_PLUS_PLUS: {
+        if(value_atomic(operand)) {
+            IrValue one = { 0 };
+            one.kind = IR_VAL_CONST_INT;
+            one.as.const_i = 1;
+            one.type = operand.type;
+
+            IrValue dest = new_temp(ctx, operand.type);
+            emit(ctx, IR_ATOMIC_ADD, dest, operand, one, 0);
+            return dest;
+        }
+
         IrValue inc = { 0 };
         inc.kind = IR_VAL_CONST_INT;
         inc.as.const_i = 1;
@@ -370,6 +421,17 @@ static IrValue gen_unary_op(IrGenContext *ctx, Node *node) {
         return operand;
     }
     case OP_MINUS_MINUS: {
+        if(value_atomic(operand)) {
+            IrValue neg_one = { 0 };
+            neg_one.kind = IR_VAL_CONST_INT;
+            neg_one.as.const_i = -1;
+            neg_one.type = operand.type;
+
+            IrValue dest = new_temp(ctx, operand.type);
+            emit(ctx, IR_ATOMIC_ADD, dest, operand, neg_one, 0);
+            return dest;
+        }
+
         IrValue dec = { 0 };
         dec.kind = IR_VAL_CONST_INT;
         dec.as.const_i = 1;
@@ -383,8 +445,49 @@ static IrValue gen_unary_op(IrGenContext *ctx, Node *node) {
     return operand;
 }
 
+static long long const_op_value(Node *node) {
+    if(node->kind == NODE_LITERAL && node->ast.literals.type == INT) {
+        return node->ast.literals.integer64;
+    }
+    if(node->kind == NODE_ENUM_ACCESS) {
+        return node->ast.enum_access.resolved_type;
+    }
+    return -1;
+}
+
+static IrValue gen_atomic_call(IrGenContext *ctx, Node *node) {
+    NodeList* args = node->ast.call_function.args;
+    long long op = const_op_value(args->items[0]);
+
+    if(op == 1) {
+        emit(ctx, IR_FENCE, none_value(), none_value(), none_value(), 0);
+        IrValue dummy = { 0 };
+        dummy.kind = IR_VAL_CONST_INT;
+        dummy.as.const_i = 0;
+        return dummy;
+    }
+
+    IrValue ptr = gen_expr(ctx, args->items[1]);
+    IrValue expected = gen_expr(ctx, args->items[2]);
+    IrValue desired = gen_expr(ctx, args->items[3]);
+    IrValue dest = new_temp(ctx, node->resolved_type);
+
+    IrInstruction instruction = { 0 };
+    instruction.op = IR_ATOMIC_CAS;
+    instruction.dest = dest;
+    instruction.src1 = ptr;
+    instruction.src2 = expected;
+    instruction.src3 = desired;
+    list_push(ctx->arena, &ctx->instructions, instruction);
+    return dest;
+}
+
 static IrValue gen_func_call(IrGenContext *ctx, Node *node) {
     View name = node->ast.call_function.name;
+
+    if(view_equals(name, (View){ "__syscall_builtin", 17 })) return gen_atomic_call(ctx, node);
+
+
     int func_id = lookup_func_id(ctx, name);
 
     NodeList* args = node->ast.call_function.args;

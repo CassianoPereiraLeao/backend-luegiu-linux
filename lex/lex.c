@@ -114,6 +114,7 @@ static TokenType check_keyword(View view) {
         if(strcompare(view, "uint64")) return KUINT64;
         if(strcompare(view, "double")) return KDOUBLE;
         if(strcompare(view, "extern")) return KEXTERN;
+        if(strcompare(view, "atomic")) return KATOMIC;
         break;
     case 7:
         if(strcompare(view, "newtype")) return KNEWTYPE;

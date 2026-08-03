@@ -7,7 +7,8 @@
 typedef enum {
     REG_RAX,
     REG_RCX,
-    REG_RDX
+    REG_RDX,
+    REG_R11
 } RegFamily;
 
 typedef struct {

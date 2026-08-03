@@ -82,6 +82,7 @@ typedef enum {
     KELSE,
     KCONST,
     KSTATIC,
+    KATOMIC,
     KLOAD,
     KCALL,
     KBREAK,

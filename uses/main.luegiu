@@ -10,7 +10,7 @@ link end(uint8 code) {
 }
 
 static void show() {
-    __syscall_builtin(1, 1, "Hello\n", strlen("Hello\n"), 0, 0, 0);
+    __syscall_builtin(1, 1, "Hello\n", 6, 0, 0, 0);
 }
 
 link start(uint32 argc, char** argv) {

@@ -1005,6 +1005,18 @@ static void check_var_decl(CheckContext *ctx, Node *node) {
         report_assignable(ctx, current, declared, node->ast.decl_variable.init, node);
     }
 
+    if(node->ast.decl_variable.attomic) {
+        bool valid = is_integer_base(declared.base) || is_ptr(declared) || is_link(declared);
+        size_t size = type_size(ctx, declared);
+
+        if(!valid || size > 8) {
+            diag_error(ctx->context, node->filename, node->line, node->col,
+                "'atomic' so e valido em inteiros ou ponteiros de ate 8 bytes");
+        } else {
+            declared.is_atomic = true;
+        }
+    }
+
     node->resolved_type = declared;
     scope_declare(ctx, name, declared);
 }
@@ -1137,6 +1149,7 @@ static TypecheckType check_func_call(CheckContext *ctx, Node *node) {
 
     for(size_t i = 0; i < signature->param_count; ++i) {
         if(view_equals(name, (View){ "__syscall_builtin", 17 })) break;
+        if(view_equals(name, (View){ "__atomic", 8 })) break;
         Node* arg_node = args->items[i];
         TypecheckType arg_type = check_expr(ctx, arg_node);
         report_assignable(ctx, arg_type, signature->param_types[i], arg_node, arg_node);
@@ -1238,36 +1251,47 @@ static void check_stmt(CheckContext *ctx, Node *node) {
 }
 
 static void register_builtin(CheckContext *ctx) {
-    View name = { "__syscall_builtin", 17 };
+    View syscall_built = { "__syscall_builtin", 17 };
 
-    TypecheckType* params = (TypecheckType*)arena_alloc(ctx->arena, sizeof(TypecheckType) * 7);
+    TypecheckType* params_syscall = (TypecheckType*)arena_alloc(ctx->arena, sizeof(TypecheckType) * 7);
 
-    params[0].base = KINT64;
-    params[0].ptr_lvl = 0;
-    params[1].base = KINT64;
-    params[1].ptr_lvl = 0;
-    params[2].base = KINT64;
-    params[2].ptr_lvl = 0;
-    params[3].base = KINT64;
-    params[3].ptr_lvl = 0;
-    params[4].base = KINT64;
-    params[4].ptr_lvl = 0;
-    params[5].base = KINT64;
-    params[5].ptr_lvl = 0;
-    params[6].base = KINT64;
-    params[6].ptr_lvl = 0;
+    for(int i = 0; i < 7; ++i) {
+        params_syscall[i].base = KINT64;
+        params_syscall[i].ptr_lvl = 0;
+    }
 
-    TypecheckType type = { 0 };
-    type.base = KINT64;
-    type.ptr_lvl = 0;
+    TypecheckType call_type_syscall = { 0 };
+    call_type_syscall.base = KINT64;
+    call_type_syscall.ptr_lvl = 0;
 
-    FuncSignature signature = { 0 };
-    signature.call_type = type;
-    signature.param_count = 7;
-    signature.param_types = params;
-    signature.variadic = false;
+    FuncSignature syscall_signature = { 0 };
+    syscall_signature.call_type = call_type_syscall;
+    syscall_signature.param_count = 7;
+    syscall_signature.param_types = params_syscall;
+    syscall_signature.variadic = false;
 
-    func_table_declare(ctx, name, signature, false, false, false, false, NULL);
+    func_table_declare(ctx, syscall_built, syscall_signature, false, false, false, false, NULL);
+
+    View atomic_built = { "__atomic", 8 };
+
+    TypecheckType* params_atomic = (TypecheckType*)arena_alloc(ctx->arena, sizeof(TypecheckType) * 4);
+
+    for(int i = 0; i < 4; ++i) {
+        params_atomic[i].base = KINT64;
+        params_atomic[i].ptr_lvl = 0;
+    }
+
+    TypecheckType call_type_atomic = { 0 };
+    call_type_atomic.base = KINT64;
+    call_type_atomic.ptr_lvl = 0;
+
+    FuncSignature atomic_signature = { 0 };
+    atomic_signature.call_type = call_type_atomic;
+    atomic_signature.param_count = 4;
+    atomic_signature.param_types = params_atomic;
+    atomic_signature.variadic = false;
+
+    func_table_declare(ctx, atomic_built, atomic_signature, false, false, false, false, NULL);
 }
 
 static void check_unresolved_forward_decls(CheckContext *ctx) {
