@@ -1,0 +1,9 @@
+extract -> "../defaultlib/linux/threads.lh"
+
+big futex_wait(uint32 addr, int32 expected) {
+    call __syscall_builtin(SYS:<FUTEX, addr, FUTEX:<WAIT, expected, 0, 0, 0);
+}
+
+static big futex_wake(uint32 addr, int number) {
+    call __syscall_builtin(SYS:<FUTEX, addr, FUTEX:<WAKE, number, 0, 0, 0);
+}

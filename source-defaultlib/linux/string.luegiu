@@ -1,0 +1,23 @@
+extract -> "../defaultlib/linux/string.lh"
+
+uint64 strlen(const char* buffer) {
+    uint64 i = 0;
+    while(buffer[i]) i++;
+    call i;
+}
+
+void memorycopy(link dest, link src, uint32 size) {
+
+}
+
+uint8 memorycmp(link src1, link src2, uint32 size) {
+
+}
+
+uint8 stringcmpall(const char* src1, const char* src2) {
+
+}
+
+uint8 islower(const char c) {
+    call (c >= 'a' && c <= 'z');
+}
