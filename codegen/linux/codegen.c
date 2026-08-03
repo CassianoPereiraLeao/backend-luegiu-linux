@@ -18,6 +18,12 @@ static int type_bytes_size(TypecheckType type) {
     }
 }
 
+static bool view_equals(View a, View b) {
+    if(a.len != b.len) return false;
+
+    return memcmp(a.start, b.start, b.len) == 0;
+}
+
 static const char* register_name(RegFamily family, int size) {
     static const char* table[3][4] = {
         { "al", "ax", "eax", "rax" },
@@ -395,7 +401,10 @@ static void emit_instruction(CodegenContext *ctx, IrInstruction instruction) {
 
     case IR_CALL: {
         if(instruction.src1.kind == IR_VAL_BUILTIN) { SPACES; fprintf(out, "call __syscall_builtin"); NL; }
-        else { SPACES; fprintf(out, "call Lfunc%d", instruction.src1.as.func_id); NL;}
+        else {
+            View name = instruction.src1.func_name;
+            SPACES; fprintf(out, "call %.*s", (int)name.len, name.start); NL;
+        }
         SPACES; emit_store(out, ctx, REG_RAX, instruction.dest); NL;
         return;
     }
@@ -437,12 +446,18 @@ static void emit_function(CodegenContext *ctx, Node *func_node, IrGenContext *ir
 
     compute_layouts(ctx, ir_ctx, range.start, range.end, range.slot_count, range.temp_count);
 
+    View name = func_node->ast.decl_function.name;
+
+    if(!func_node->ast.decl_function.stattic && !view_equals(name, (View){"start", 5})) {
+        fprintf(out, "global %.*s", (int)name.len, name.start); NL;
+    }
+
     bool is_entry = (func_node == ctx->entry_function);
     if(is_entry) {
         fprintf(out, "start:"); NL;
     }
 
-    fprintf(out, "Lfunc%d:", func_node->func_id); NL;
+    fprintf(out, "%.*s:", (int)name.len, name.start); NL;
 
     emit_func_prologue(ctx, func_node);
 
@@ -455,11 +470,12 @@ static void emit_function(CodegenContext *ctx, Node *func_node, IrGenContext *ir
 }
 
 
-CodegenContext create_codegen(FILE *out, Arena *arena, Node *func_entry) {
+CodegenContext create_codegen(FILE *out, Arena *arena, Node *func_entry, CheckContext *check_ctx) {
     CodegenContext ctx;
     ctx.out = out;
     ctx.arena = arena;
     ctx.entry_function = func_entry;
+    ctx.check_ctx = check_ctx;
     ctx.current_function_id = 0;
     ctx.slot_layouts = NULL;
     ctx.temp_layouts = NULL;
@@ -489,6 +505,18 @@ static bool* build_builtin_arg_map(Arena *arena, IrInstruction *items, size_t st
     }
 
     return is_builtin_arg;
+}
+
+static void emit_externs(CodegenContext *ctx) {
+    FILE* out = ctx->out;
+
+    for(int i = 0; i < FUNC_TABLE_SIZE; ++i) {
+        for(FuncEntry* entry = ctx->check_ctx->func_buckets[i]; entry != NULL; entry = entry->next) {
+            if(entry->is_extern && !entry->has_body) {
+                fprintf(out, "extern %.*s", (int)entry->name.len, entry->name.start); NL;
+            }
+        }
+    }
 }
 
 void emit_program(CodegenContext *ctx, IrGenContext *ir_gen) {
@@ -526,9 +554,20 @@ void emit_program(CodegenContext *ctx, IrGenContext *ir_gen) {
         NL;
     }
 
+    emit_externs(ctx);
+
     fprintf(out, "section .text"); NL;
-    fprintf(out, "global __syscall_builtin"); NL;
-    fprintf(out, "global _start"); NL; NL;
+
+    bool is_entry_unit = (ctx->entry_function != NULL);
+
+    if(is_entry_unit) {
+        fprintf(out, "global __syscall_builtin"); NL;
+        fprintf(out, "global _start"); NL;
+    } else {
+        fprintf(out, "extern __syscall_builtin"); NL;
+    }
+
+    NL;
 
     ctx->is_builtin_arg = build_builtin_arg_map(ctx->arena, ir_gen->instructions.items, 0, ir_gen->instructions.count);
 
@@ -538,24 +577,26 @@ void emit_program(CodegenContext *ctx, IrGenContext *ir_gen) {
         NL;
     }
 
-    NL; fprintf(out, "__syscall_builtin:"); NL;
-    SPACES; fprintf(out, "mov r11, rcx"); NL;
-    SPACES; fprintf(out, "mov rax, rdi"); NL;
-    SPACES; fprintf(out, "mov rdi, rsi"); NL;
-    SPACES; fprintf(out, "mov rsi, rdx"); NL;
-    SPACES; fprintf(out, "mov rdx, r11"); NL;
-    SPACES; fprintf(out, "mov r11, r8"); NL;
-    SPACES; fprintf(out, "mov r10, r11"); NL;
-    SPACES; fprintf(out, "mov r8, r9"); NL;
-    SPACES; fprintf(out, "mov r9, [rsp+8]"); NL;
-    SPACES; fprintf(out, "syscall"); NL;
-    SPACES; fprintf(out, "ret"); NL;
+    if(is_entry_unit) {
+        NL; fprintf(out, "__syscall_builtin:"); NL;
+        SPACES; fprintf(out, "mov r11, rcx"); NL;
+        SPACES; fprintf(out, "mov rax, rdi"); NL;
+        SPACES; fprintf(out, "mov rdi, rsi"); NL;
+        SPACES; fprintf(out, "mov rsi, rdx"); NL;
+        SPACES; fprintf(out, "mov rdx, r11"); NL;
+        SPACES; fprintf(out, "mov r11, r8"); NL;
+        SPACES; fprintf(out, "mov r10, r11"); NL;
+        SPACES; fprintf(out, "mov r8, r9"); NL;
+        SPACES; fprintf(out, "mov r9, [rsp+8]"); NL;
+        SPACES; fprintf(out, "syscall"); NL;
+        SPACES; fprintf(out, "ret"); NL;
 
-    NL; fprintf(out, "_start:"); NL;
-    SPACES; fprintf(out, "mov edi, [rsp]"); NL;
-    SPACES; fprintf(out, "lea rsi, [rsp+8]"); NL;
-    SPACES; fprintf(out, "call start"); NL;
-    SPACES; fprintf(out, "mov edi, eax"); NL;
-    SPACES; fprintf(out, "mov eax, 60"); NL;
-    SPACES; fprintf(out, "syscall"); NL;
+        NL; fprintf(out, "_start:"); NL;
+        SPACES; fprintf(out, "mov edi, [rsp]"); NL;
+        SPACES; fprintf(out, "lea rsi, [rsp+8]"); NL;
+        SPACES; fprintf(out, "call start"); NL;
+        SPACES; fprintf(out, "mov edi, eax"); NL;
+        SPACES; fprintf(out, "mov eax, 60"); NL;
+        SPACES; fprintf(out, "syscall"); NL;
+    }
 }

@@ -685,7 +685,7 @@ static Node* parse_block_stmt(Parser *parser) {
     return node;
 }
 
-static Node* parse_func_decl(Parser *parser, bool isstatic, Node *type, size_t ptr_lvl) {
+static Node* parse_func_decl(Parser *parser, bool isstatic, bool isextern, Node *type, size_t ptr_lvl) {
     Node* node = create_node_at(parser, NODE_FUNC_DECL, peekprev(parser));
     node->ast.decl_function.call_type = type_spec_from_node(type);
     node->ast.decl_function.name = peekprev(parser).value;
@@ -693,6 +693,12 @@ static Node* parse_func_decl(Parser *parser, bool isstatic, Node *type, size_t p
     node->ast.decl_function.stattic = isstatic;
     node->ast.decl_function.variadic = false;
     node->ast.decl_function.params = list_create(parser->arena);
+    node->ast.decl_function.exttern = isextern;
+
+    if(isextern && isstatic) {
+        diag_error(parser->context, peek(parser).filename, peek(parser).line, peek(parser).col,
+            "Uma função extern não pode ser static ao mesmo tempo");
+    }
 
     expected(parser, OPEN_PAREN, "Esperado '(' apos o nome da funcao");
 
@@ -732,10 +738,18 @@ static Node* parse_func_decl(Parser *parser, bool isstatic, Node *type, size_t p
 
     expected(parser, CLOSE_PAREN, "Esperado ')' apos os parametros");
 
-    if(peek(parser).type == SEMICOLON) expected(parser, SEMICOLON, "Esperado ';' ou '{' apos a funcao");
+    if(peek(parser).type == SEMICOLON) {
+        expected(parser, SEMICOLON, "Esperado ';' ou '{' apos a funcao");
+        node->ast.decl_function.body = NULL;
+    }
     else if(peek(parser).type == OPEN_BRACE) node->ast.decl_function.body = parse_statement(parser);
     else diag_error(parser->context, peek(parser).filename, peek(parser).line, peek(parser).col,
             "Esperado ';' ou '{' apos a funcao");
+
+    if(node->ast.decl_function.exttern && node->ast.decl_function.body != NULL) {
+        diag_error(parser->context, peek(parser).filename, peek(parser).line, peek(parser).col,
+            "Uma função extern não pode conter corpo de função");
+    }
 
     return node;
 }
@@ -762,6 +776,7 @@ static Node* parse_var_decl(Parser *parser, bool isstatic, bool isconst, Node *t
 }
 
 static Node* parse_decl(Parser *parser) {
+    bool is_extern = match(parser, KEXTERN);
     bool is_static = match(parser, KSTATIC);
     bool is_const = match(parser, KCONST);
 
@@ -773,7 +788,7 @@ static Node* parse_decl(Parser *parser) {
     expected(parser, IDENTIFIER, "Esperado nome da funcao ou variavel");
 
     if(peek(parser).type == OPEN_PAREN)
-        return parse_func_decl(parser, is_static, type, ptr_lvl);
+        return parse_func_decl(parser, is_static, is_extern, type, ptr_lvl);
     return parse_var_decl(parser, is_static, is_const, type, ptr_lvl);
 }
 
@@ -903,7 +918,7 @@ static Node* parse_statement(Parser *parser) {
     if(current == KCALL) return parse_call_stmt(parser);
     if(current == OPEN_BRACE) return parse_block_stmt(parser);
     if(current == KIF) return parse_if_stmt(parser);
-    if(istype(current) || current == KSTATIC || current == KCONST) return parse_decl(parser);
+    if(istype(current) || current == KSTATIC || current == KCONST || current == KEXTERN) return parse_decl(parser);
     if(current == KWHILE) return parse_while_loop(parser);
     if(current == KFOR) return parse_for_loop(parser);
     if(current == KDATA) return parse_aggregate_decl(parser, KDATA, NODE_DATA, "data");

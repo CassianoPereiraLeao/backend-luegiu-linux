@@ -84,11 +84,17 @@ static uint64_t hash_view(View view) {
     return hash;
 }
 
-static void func_table_declare(CheckContext *ctx, View name, FuncSignature signature) {
+static void func_table_declare(CheckContext *ctx, View name, FuncSignature signature, bool isstatic, bool isextern,
+    bool ispending, bool has_body, Node* decl_node) {
     uint64_t hash = hash_view(name)& (FUNC_TABLE_SIZE - 1);
     FuncEntry* entry = (FuncEntry*)arena_alloc(ctx->arena, sizeof(FuncEntry));
     entry->name = name;
     entry->signature = signature;
+    entry->is_static = isstatic;
+    entry->is_extern = isextern;
+    entry->is_pending = ispending;
+    entry->has_body = has_body;
+    entry->decl_node = decl_node;
     entry->next = ctx->func_buckets[hash];
     ctx->func_buckets[hash] = entry;
 }
@@ -332,6 +338,19 @@ static bool literal_overflows(Node *node, TypecheckType type) {
         return value > max || value < min;
     }
 }
+
+static bool signature_equal(FuncSignature *a, FuncSignature *b) {
+    if(!type_equals(a->call_type, b->call_type)) return false;
+    if(a->param_count != b->param_count) return false;
+    if(a->variadic != b->variadic) return false;
+
+    for(size_t i = 0; i < a->param_count; ++i) {
+        if(!type_equals(a->param_types[i], b->param_types[i])) return false;
+    }
+
+    return true;
+}
+
 
 static CompatResult check_assignable(TypecheckType from, TypecheckType to, Node *node, bool is_cast, const char** msg) {
     if(is_cast) return COMPAT_OK;
@@ -1015,15 +1034,9 @@ static void check_func_decl(CheckContext *ctx, Node *node) {
     }
 
     View name = node->ast.decl_function.name;
-
-    if(func_table_lookup(ctx, name)) {
-        diag_error(ctx->context, node->filename, node->line, node->col,
-            "funcao '%.*s' ja declarada", (int)name.len, name.start);
-        return;
-    }
+    bool has_body = (node->ast.decl_function.body != NULL);
 
     TypecheckType call_type = resolve_type_spec(ctx, node->ast.decl_function.call_type);
-
     if(type_is_error(call_type)) {
         diag_error(ctx->context, node->filename, node->line, node->col, 
             "tipo de retorno nao declarado para '%.*s'", (int)name.len, name.start); 
@@ -1044,7 +1057,35 @@ static void check_func_decl(CheckContext *ctx, Node *node) {
     signature.param_count = params->count;
     signature.variadic = node->ast.decl_function.variadic;
 
-    func_table_declare(ctx, name, signature);
+    FuncEntry* exist = func_table_lookup(ctx, name);
+
+    if(exist) {
+        if(exist->has_body) {
+            diag_error(ctx->context, node->filename, node->line, node->col,
+                "funcao '%.*s' ja declarada", (int)name.len, name.start);
+            return;
+        }
+
+        if(!signature_equal(&exist->signature, &signature)) {
+            diag_error(ctx->context, node->filename, node->line, node->col,
+                "definicao de '%.*s' nao corresponde ao prototype declarado anteriormente",
+                (int)name.len, name.start);
+            return;
+        }
+
+        exist->signature = signature;
+        exist->decl_node = node;
+        if(has_body) {
+            exist->has_body = true;
+            exist->is_pending = false;
+        }
+    } else {
+        func_table_declare(ctx, name, signature,
+            node->ast.decl_function.stattic, node->ast.decl_function.exttern,
+            !has_body && !node->ast.decl_function.exttern, has_body, node);
+    }
+
+    if(!has_body) return;
 
     scope_push(ctx);
 
@@ -1056,11 +1097,9 @@ static void check_func_decl(CheckContext *ctx, Node *node) {
     ctx->current_call_type = call_type;
     ctx->in_function = true;
 
-    if(node->ast.decl_function.body && node->ast.decl_function.body->kind == NODE_BLOCK) {
-        NodeList* stmts = node->ast.decl_function.body->ast.program.statements;
-        for(size_t i = 0; i < stmts->count; ++i) {
-            check_stmt(ctx, stmts->items[i]);
-        }
+    NodeList* stmts = node->ast.decl_function.body->ast.program.statements;
+    for(size_t i = 0; i < stmts->count; ++i) {
+        check_stmt(ctx, stmts->items[i]);
     }
 
     ctx->in_function = false;
@@ -1228,7 +1267,20 @@ static void register_builtin(CheckContext *ctx) {
     signature.param_types = params;
     signature.variadic = false;
 
-    func_table_declare(ctx, name, signature);
+    func_table_declare(ctx, name, signature, false, false, false, false, NULL);
+}
+
+static void check_unresolved_forward_decls(CheckContext *ctx) {
+    for(int i = 0; i < FUNC_TABLE_SIZE; ++i) {
+        for(FuncEntry* entry = ctx->func_buckets[i]; entry != NULL; entry = entry->next) {
+            if(entry->is_pending) {
+                Node* node = entry->decl_node;
+                diag_error(ctx->context, node->filename, node->line, node->col,
+                    "funcao '%.*s' declarada mas nunca definida",
+                    (int)entry->name.len, entry->name.start);
+            }
+        }
+    }
 }
 
 void check_program(CheckContext *ctx, Node *program) {
@@ -1243,8 +1295,5 @@ void check_program(CheckContext *ctx, Node *program) {
 
     scope_pop(ctx);
 
-    if(ctx->entry_function == NULL) {
-        diag_error(ctx->context, program->filename, program->line, program->col,
-            "programa sem entry point 'start'");
-    }
+    check_unresolved_forward_decls(ctx);
 }

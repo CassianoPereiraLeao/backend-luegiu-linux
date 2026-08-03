@@ -22,8 +22,26 @@ typedef struct {
     bool ir;
     bool codegen;
     bool preprocess;
-    const char* path;
+    const char* path[50];
+    uint8_t paths_count;
 } CliOptions;
+
+typedef struct {
+    const char* filename;
+    bool has_entry;
+    bool had_error;
+} UnitResult;
+
+static char* sanitize_filename(const char* path, char* out, size_t out_size) {
+    size_t i = 0;
+    for(; path[i] != '\0' && i < out_size - 1; ++i) {
+        char c = path[i];
+        out[i] = (c == '/' || c == '\\') ? '_' : c;
+    }
+
+    out[i] = '\0';
+    return out;
+}
 
 static const char* severity_name(DiagSeverity s) {
     switch(s) {
@@ -161,14 +179,19 @@ static void print_type_spec(FILE *out, TypeSpec spec) {
     for(size_t i = 0; i < spec.ptr_lvl; ++i) fprintf(out, "*");
 }
 
-static void run_lex_dump(const char* src, const char* path, DiagContext *ctx) {
-    FILE* out = fopen("./debug/exit.luegiu.lex", "wb");
+static void run_lex_dump(const char* src, const char* filename, DiagContext *ctx) {
+    char sanitized[255];
+    sanitize_filename(filename, sanitized, sizeof(sanitized));
+
+    char path[300];
+    snprintf(path, sizeof(path), "./debug/%s.lex", sanitized);
+    FILE* out = fopen(path, "wb");
     if(!out) {
-        fprintf(stderr, "Nao foi possivel abrir ./debug/exit.luegiu.lex para escrita\n");
+        fprintf(stderr, "Nao foi possivel abrir %s para escrita\n", sanitized);
         return;
     }
 
-    Lexer lexer = create_lexer(src, path, ctx);
+    Lexer lexer = create_lexer(src, filename, ctx);
     
     fprintf(out, "Analise lexica:\n\n");
 
@@ -425,9 +448,14 @@ static Node* run_parse(const char* src, const char* path, Arena *arena, DiagCont
 }
 
 static void run_parse_dump(Node *program) {
-    FILE* out = fopen("./debug/exit.luegiu.parser", "wb");
+    char sanitized[255];
+    sanitize_filename(program->filename, sanitized, sizeof(sanitized));
+
+    char path[300];
+    snprintf(path, sizeof(path), "./debug/%s.parse", sanitized);
+    FILE* out = fopen(path, "wb");
     if(!out) {
-        fprintf(stderr, "Nao foi possivel abrir ./debug/exit.luegiu.parser para escrita\n");
+        fprintf(stderr, "Nao foi possivel abrir %s para escrita\n", sanitized);
         return;
     }
 
@@ -438,9 +466,14 @@ static void run_parse_dump(Node *program) {
 }
 
 static void run_check_dump(CheckContext *ctx, Node *program, DiagContext *context) {
-    FILE* out = fopen("./debug/exit.luegiu.checker", "wb");
+    char sanitized[255];
+    sanitize_filename(program->filename, sanitized, sizeof(sanitized));
+
+    char path[300];
+    snprintf(path, sizeof(path), "./debug/%s.check", sanitized);
+    FILE* out = fopen(path, "wb");
     if(!out) {
-        fprintf(stderr, "Nao foi possivel abrir ./debug/exit.luegiu.checker para escrita\n");
+        fprintf(stderr, "Nao foi possivel abrir %s para escrita\n", sanitized);
         return;
     }
 
@@ -499,9 +532,14 @@ static void print_ir_value(FILE *out, IrValue value) {
 }
 
 static void run_ir_dump(Node *program, Arena *arena) {
-    FILE* out = fopen("./debug/exit.luegiu.ir", "wb");
+    char sanitized[255];
+    sanitize_filename(program->filename, sanitized, sizeof(sanitized));
+
+    char path[300];
+    snprintf(path, sizeof(path), "./debug/%s.ir", sanitized);
+    FILE* out = fopen(path, "wb");
     if(!out) {
-        fprintf(stderr, "Nao foi possivel abrir ./debug/exit.luegiu.ir para escrita\n");
+        fprintf(stderr, "Nao foi possivel abrir %s para escrita\n", sanitized);
         return;
     }
 
@@ -552,14 +590,19 @@ static void run_ir_dump(Node *program, Arena *arena) {
     fclose(out);
 }
 
-static void run_codegen_dump(IrGenContext *ctx, Arena *arena, Node *entry) {
-    FILE* out = fopen("./debug/out.s", "wb");
+static void run_codegen_dump(IrGenContext *ctx, Arena *arena, Node *entry, CheckContext *check_ctx, const char* filename) {
+    char sanitized[255];
+    sanitize_filename(filename, sanitized, sizeof(sanitized));
+
+    char path[300];
+    snprintf(path, sizeof(path), "./debug/%s.s", sanitized);
+    FILE* out = fopen(path, "wb");
     if(!out) {
-        fprintf(stderr, "Nao foi possivel abrir ./debug/out.asm para escrita\n");
+        fprintf(stderr, "Nao foi possivel abrir %s para escrita\n", sanitized);
         return;
     }
 
-    CodegenContext context = create_codegen(out, arena, entry);
+    CodegenContext context = create_codegen(out, arena, entry, check_ctx);
     
     emit_program(&context, ctx);
 
@@ -587,10 +630,15 @@ static char* dirname_of(const char* path, Arena *arena) {
     return dir;
 }
 
-static void write_preprocess_dump(const char* src, const char* expanded) {
-    FILE* out = fopen("./debug/exit.luegiu.preprocess", "wb");
+static void write_preprocess_dump(const char* filename, const char* src, const char* expanded) {
+    char sanitized[255];
+    sanitize_filename(filename, sanitized, sizeof(sanitized));
+
+    char path[300];
+    snprintf(path, sizeof(path), "./debug/%s.preprocess", sanitized);
+    FILE* out = fopen(path, "wb");
     if(!out) {
-        fprintf(stderr, "Aviso: nao foi possivel escrever './debug/exit.luegiu.preprocess': %s\n", strerror(errno));
+        fprintf(stderr, "Aviso: nao foi possivel escrever %s: %s\n", path, strerror(errno));
         return;
     }
 
@@ -615,7 +663,7 @@ static CliOptions parse_args(int argc, char* argv[]) {
         else if(strcmp(argv[i], "-Ir") == 0) opts.ir = true;
         else if(strcmp(argv[i], "-Codegen") == 0) opts.codegen = true;
         else if(strcmp(argv[i], "-Preprocess") == 0) opts.preprocess = true;
-        else if(!opts.path) opts.path = argv[i];
+        else if(opts.paths_count < 50) opts.path[opts.paths_count++] = argv[i];
     }
     return opts;
 }
@@ -623,8 +671,8 @@ static CliOptions parse_args(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     CliOptions opts = parse_args(argc, argv);
 
-    if(!opts.path) {
-        fprintf(stderr, "Uso: %s [-Lex] [-Parse] [-Check] [-Ir] [-Codegen] [-Preprocess] <arquivo>\n", argv[0]);
+    if(opts.paths_count == 0) {
+        fprintf(stderr, "Uso: %s [-Lex] [-Parse] [-Check] [-Ir] [-Codegen] [-Preprocess] <arquivo...>\n", argv[0]);
         return 1;
     }
 
@@ -633,65 +681,123 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    size_t size;
-    char* src = read_file(opts.path, &size);
+    UnitResult* results = malloc(sizeof(UnitResult) * opts.paths_count);
 
-    Arena arena;
-    arena_init(&arena, MB);
+    for(int file = 0; file < opts.paths_count; ++file) {
+        const char* path = opts.path[file];
 
-    char* base_dir = dirname_of(opts.path, &arena);
-    const char* lib_dir = "defaultlib";
+        size_t size;
+        char* src = read_file(path, &size);
 
-    LineMap map;
-    linemap_init(&map);
+        Arena arena;
+        arena_init(&arena, MB);
 
-    char* expanded = preprocess_source(src, base_dir, lib_dir, opts.path, &arena, &map);
+        char* base_dir = dirname_of(path, &arena);
+        const char* lib_dir = "defaultlib";
 
-    if(opts.preprocess) {
-        write_preprocess_dump(src, expanded);
+        LineMap map;
+        linemap_init(&map);
+
+        char* expanded = preprocess_source(src, base_dir, lib_dir, path, &arena, &map);
+
+        if(opts.preprocess) write_preprocess_dump(path, src, expanded);
+
+        DiagContext context;
+        diag_init(&context, &arena);
+        diag_set_max_errors(&context, 200);
+
+        if(opts.lex) run_lex_dump(expanded, path, &context);
+
+        Node* program = NULL;
+        if(opts.parse || opts.check) {
+            program = run_parse(expanded, path, &arena, &context);
+
+            if(has_error(&context)) {
+                diag_report_all(&context);
+                results[file].filename = path;
+                results[file].has_entry = false;
+                results[file].had_error = true;
+                free(src);
+                arena_free(&arena);
+                continue;
+            }
+        }
+
+        CheckContext check_ctx = create_check_context(&arena, &context);
+
+        if(opts.parse) run_parse_dump(program);
+        if(opts.check) run_check_dump(&check_ctx, program, &context);
+
+        if(opts.ir || opts.codegen) {
+            if(has_error(&context)) {
+                diag_report_all(&context);
+                results[file].filename = path;
+                results[file].had_error = true;
+                free(src);
+                arena_free(&arena);
+                continue;
+            }
+        }
+
+        if(opts.ir) {
+            if(!has_error(&context)) run_ir_dump(program, &arena);
+        }
+
+        if(opts.codegen) {
+            IrGenContext ir_ctx = create_irgen_context(&arena);
+            irgen_program(&ir_ctx, program);
+            run_codegen_dump(&ir_ctx, &arena, check_ctx.entry_function, &check_ctx, path);
+        }
+
+        results[file].filename = path;
+        results[file].has_entry = (check_ctx.entry_function != NULL);
+        results[file].had_error = has_error(&context);
+
+        free(src);
+        arena_free(&arena);
     }
 
-    DiagContext context;
-    diag_init(&context, &arena);
-    diag_set_max_errors(&context, 200);
+    int entry_count = 0;
+    for(int file = 0; file < opts.paths_count; ++file) {
+        if(results[file].has_entry) entry_count++;
+    }
 
-    if(opts.lex) 
-        run_lex_dump(expanded, opts.path, &context);
-
-    Node* program = NULL;
-    if(opts.parse || opts.check) {
-        program = run_parse(expanded, opts.path, &arena, &context);
-
-        if(has_error(&context)) {
-            diag_report_all(&context);
-            free(src);
-            arena_free(&arena);
-            return 1;
+    if(entry_count == 0) {
+        fprintf(stderr, "Erro: nenhum ponto de entrada 'start' encontrado no projeto\n");
+    } else if(entry_count > 1) {
+        fprintf(stderr, "Erro: multiplas definicoes de entry point 'start':\n");
+        for(int f = 0; f < opts.paths_count; ++f) {
+            if(results[f].has_entry) fprintf(stderr, "  - %s\n", results[f].filename);
         }
     }
 
-    CheckContext check_ctx = create_check_context(&arena, &context);
-
-    if(opts.parse) {
-        run_parse_dump(program);
+    if(entry_count != 1) {
+        return 1;
     }
 
-    if(opts.check) {
-        run_check_dump(&check_ctx, program, &context);
+    char nasm_cmd[1024];
+    char obj_list[1024] = "";
+
+    for(int file = 0; file < opts.paths_count; ++file) {
+        char asm_path[256];
+        char obj_path[256];
+
+        char sanitezed[128];
+        sanitize_filename(results[file].filename, sanitezed, sizeof(sanitezed));
+
+        snprintf(asm_path, sizeof(asm_path), "./debug/%s.s", sanitezed);
+        snprintf(obj_path, sizeof(obj_path), "./debug/%s.o", sanitezed);
+
+        snprintf(nasm_cmd, sizeof(nasm_cmd), "nasm -f elf64 %s -o %s", asm_path, obj_path);
+        system(nasm_cmd);
+
+        strcat(obj_list, obj_path);
+        strcat(obj_list, " ");
     }
 
-    if(opts.ir) {
-        if(has_error(&context)) return 1;
-        else run_ir_dump(program, &arena);
-    }
+    char link_cmd[2048];
+    snprintf(link_cmd, sizeof(link_cmd), "ld -o ./out/program %s", obj_list);
+    system(link_cmd);
 
-    if(opts.codegen) {
-        IrGenContext ir_ctx = create_irgen_context(&arena);
-        irgen_program(&ir_ctx, program);
-        run_codegen_dump(&ir_ctx, &arena, check_ctx.entry_function);
-    }
-
-    free(src);
-    arena_free(&arena);
-    return 0;
+    free(results);
 }

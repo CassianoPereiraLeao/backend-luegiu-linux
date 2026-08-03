@@ -48,6 +48,7 @@ typedef struct {
 
     TypecheckType type;
     int field_offset;
+    View func_name;
 } IrValue;
 
 typedef struct {

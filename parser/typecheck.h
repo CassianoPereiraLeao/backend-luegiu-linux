@@ -63,6 +63,11 @@ typedef struct {
 typedef struct FuncEntry {
     View name;
     FuncSignature signature;
+    bool is_static;
+    bool is_extern;
+    bool is_pending;
+    bool has_body;
+    Node* decl_node;
     struct FuncEntry* next;
 } FuncEntry;
 

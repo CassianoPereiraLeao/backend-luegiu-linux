@@ -88,6 +88,7 @@ typedef enum {
     KCONTINUE,
     KUP,
     KJUMP,
+    KEXTERN,
 
     KVOID,
     KSMALL,

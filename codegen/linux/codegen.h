@@ -19,6 +19,7 @@ typedef struct {
     FILE* out;
     Arena *arena;
     Node* entry_function;
+    CheckContext* check_ctx;
     int current_function_id;
     CodegenSlotLayout* slot_layouts;
     CodegenSlotLayout* temp_layouts;
@@ -27,5 +28,5 @@ typedef struct {
     size_t current_instruc_index;
 } CodegenContext;
 
-CodegenContext create_codegen(FILE *out, Arena *arena, Node *func_entry);
+CodegenContext create_codegen(FILE *out, Arena *arena, Node *func_entry, CheckContext *check_ctx);
 void emit_program(CodegenContext *ctx, IrGenContext *ir_gen);

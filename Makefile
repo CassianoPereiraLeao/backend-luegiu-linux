@@ -4,43 +4,39 @@ CFLAGS = -g -Wall -Wextra -Wimplicit-fallthrough
 NASM = nasm
 NASMFLAGS = -f elf64
 
-LD = gcc
-LDFLAGS = -nostartfiles -e start
+LD = ld
 
 COMPILADOR = ./out/luegiu
-FONTE = ./uses/main.luegiu
-ASM = ./out/out.asm
-OBJ = ./out/output.o
+FONTES_LUEGIU = $(wildcard ./uses/*.luegiu)
 PROGRAMA_FLAGS = -Preprocess -Lex -Parse -Check -Ir -Codegen
 PROGRAMA = ./out/program
 
 SOURCES = $(wildcard *.c arena/*.c diagnostics/*.c lex/*.c parser/*.c ir/*.c codegen/linux/*.c preprocess/*.c)
 
-all: build run assemble link execute exec_luegiu link_luegiu run_luegiu
+# Nomes dos .s esperados no ./debug, um por .luegiu, com '/' trocado por '_'
+ASMS = $(patsubst ./uses/%.luegiu,./debug/._uses_%.luegiu.s,$(FONTES_LUEGIU))
+OBJS = $(ASMS:.s=.o)
+
+all: build run assemble link execute
 
 build:
 	$(CC) $(CFLAGS) $(SOURCES) -o $(COMPILADOR)
 
 run:
-	$(COMPILADOR) ${PROGRAMA_FLAGS} $(FONTE) ${ASM}
+	$(COMPILADOR) $(PROGRAMA_FLAGS) $(FONTES_LUEGIU)
 
-assemble:
-	$(NASM) $(NASMFLAGS) $(ASM) -o $(OBJ)
+assemble: $(OBJS)
 
-link:
-	$(LD) $(LDFLAGS) $(OBJ) -o $(PROGRAMA)
+%.o: %.s
+	$(NASM) $(NASMFLAGS) $< -o $@
+
+link: assemble
+	$(LD) -o $(PROGRAMA) $(OBJS)
 
 execute:
 	$(PROGRAMA)
 
-exec_luegiu:
-	${NASM} ${NASMFLAGS} ./debug/out.s -o ./debug/luegiu.o
-	
-link_luegiu:
-	${LD} -nostartfiles -e _start ./debug/luegiu.o -o ./compiler/luegiu
-
-run_luegiu:
-	./compiler/luegiu
-
 clean:
-	rm -f $(COMPILADOR) $(OBJ) $(ASM) $(PROGRAMA)
+	rm -f $(COMPILADOR) $(PROGRAMA) ./debug/*.o ./debug/*.s
+
+.PHONY: all build run assemble link execute clean

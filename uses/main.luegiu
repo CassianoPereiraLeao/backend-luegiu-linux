@@ -1,31 +1,7 @@
+extract -> "main.lh"
 extract -> [linux/string.lh]
 
-enum FDs {
-    NONE,
-    STDOUT
-};
-
-data Code {
-    uint8 code;
-    uint8 coder;
-    char* str;
-};
-
-static void write(FDs fd, const char* buffer, uint64 len) {
-    __syscall_builtin(1, fd, buffer, len, 0, 0, 0);
-}
-
-static void write_integer(FDs fd, const char buffer, uint64 len) {
-    __syscall_builtin(1, fd, buffer, len, 0, 0, 0);
-}
-
-static uint64 strlen(const char* str) {
-    uint64 i = 0;
-    while(str[i]) i++;
-    call i;
-}
-
-static link end(uint8 code) {
+link end(uint8 code) {
     if(code == 0) call 0x00;
     else if(code == 1) call 0x01;
     else if(code < 30) call 0x14;
@@ -33,8 +9,11 @@ static link end(uint8 code) {
     call 0xFF;
 }
 
-static link start(uint32 argc, char** argv) {
-    write(FDs:<STDOUT, TEST, TEST_LEN);
+static void show() {
+    __syscall_builtin(1, 1, "Hello\n", strlen("Hello\n"), 0, 0, 0);
+}
 
+link start(uint32 argc, char** argv) {
+    show();
     call end(0);
 }

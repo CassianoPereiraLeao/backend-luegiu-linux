@@ -1,0 +1,7 @@
+extract -> "string.lh"
+
+uint64 strlen(const char* buffer) {
+    uint64 i = 0;
+    while(buffer[i]) i++;
+    call i;
+}

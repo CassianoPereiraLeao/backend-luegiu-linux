@@ -148,6 +148,7 @@ typedef struct Node {
             NodeList* params;
             bool variadic;
             bool stattic;
+            bool exttern;
             struct Node* body;
         } decl_function;
 

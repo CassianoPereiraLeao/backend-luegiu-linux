@@ -417,6 +417,7 @@ static IrValue gen_func_call(IrGenContext *ctx, Node *node) {
     func_reference.kind = IR_VAL_FUNC;
     if(view_equals(name, (View){ "__syscall_builtin", 17 })) func_reference.kind = IR_VAL_BUILTIN;
     func_reference.as.func_id = func_id;
+    func_reference.func_name = name;
 
     IrValue dest = new_temp(ctx, node->resolved_type);
 
@@ -684,8 +685,19 @@ static void gen_block(IrGenContext *ctx, Node *node) {
 }
 
 static void gen_func_decl(IrGenContext *ctx, Node *node) {
-    node->func_id = ctx->next_func_id++;
-    register_func_id(ctx, node->ast.decl_function.name, node->func_id);
+    bool has_body = (node->ast.decl_function.body != NULL);
+    int exist_id = lookup_func_id(ctx, node->ast.decl_function.name);
+
+    if(!has_body) {
+        if(exist_id < 0) {
+            node->func_id = ctx->next_func_id++;
+            register_func_id(ctx, node->ast.decl_function.name, node->func_id);
+        }
+        return;
+    }
+
+    node->func_id = (exist_id >= 0) ? exist_id : ctx->next_func_id++;
+    if(exist_id < 0) register_func_id(ctx, node->ast.decl_function.name, node->func_id);
 
     int saved_slot = ctx->next_slot;
     int saved_temp = ctx->next_temp;

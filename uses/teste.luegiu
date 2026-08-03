@@ -1,0 +1,9 @@
+extract -> "teste.lh"
+
+uint32 option(int32 x) {
+    call x;
+}
+
+static void show() {
+    __syscall_builtin(1, 1, "Hello\n", 6, 0, 0, 0);
+}
