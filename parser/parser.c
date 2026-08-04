@@ -767,7 +767,8 @@ static Node* parse_var_decl(Parser *parser, bool isstatic, bool isconst, bool is
 
     if(match(parser, OPEN_BRACKET)) {
         node->ast.decl_variable.type.is_array = true;
-        node->ast.decl_variable.type.ptr_lvl = 1;
+        node->ast.decl_variable.type.ptr_lvl += 1;
+        expected(parser, CLOSE_BRACKET, "Esperado ']' apos a expressao");
     }
 
     if(match(parser, OP_ASSIGN)) node->ast.decl_variable.init = parse_expr(parser);

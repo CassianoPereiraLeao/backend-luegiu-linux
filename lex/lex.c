@@ -106,6 +106,7 @@ static TokenType check_keyword(View view) {
         if(strcompare(view, "int16")) return KINT16;
         if(strcompare(view, "int32")) return KINT32;
         if(strcompare(view, "int64")) return KINT64;
+        if(strcompare(view, "break")) return KBREAK;
         break;
     case 6:
         if(strcompare(view, "static")) return KSTATIC;
@@ -397,7 +398,7 @@ Token next_token(Lexer *lexer) {
             return create_token(lexer, UNDEFINED, line, col);
         }
 
-        while(peek(lexer) != '"') {
+        while(peek(lexer) != '"' && !isend(lexer)) {
             if(peek(lexer) == '\\') advance(lexer);
             advance(lexer);
         }

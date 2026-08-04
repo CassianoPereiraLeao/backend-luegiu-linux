@@ -296,7 +296,7 @@ static void emit_instruction(CodegenContext *ctx, IrInstruction instruction) {
     }
 
     case IR_ASSIGN: {
-        int width = compute_width(instruction.src1.type);
+        int width = compute_width(instruction.dest.type);
         SPACES; emit_load(out, ctx, instruction.src1, REG_RAX, width);
         SPACESNL; emit_store(out, ctx, REG_RAX, instruction.dest); NL;
         return;
@@ -319,7 +319,7 @@ static void emit_instruction(CodegenContext *ctx, IrInstruction instruction) {
         SPACES; emit_load(out, ctx, instruction.src1, REG_RAX, width);
         SPACESNL; fprintf(out, "%s", width == 8 ? "cqo" : "cdq"); NL;
         SPACES; emit_load(out, ctx, instruction.src2, REG_RCX, width);
-        emit_value_as_operand(out, ctx, instruction.src2);
+        // emit_value_as_operand(out, ctx, instruction.src2);
         SPACESNL; fprintf(out, "idiv %s", cnt); NL;
         SPACES; emit_store(out, ctx, instruction.op == IR_DIV ? REG_RAX : REG_RDX, instruction.dest); NL;
         return;

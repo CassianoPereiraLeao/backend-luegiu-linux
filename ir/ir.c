@@ -485,7 +485,7 @@ static IrValue gen_atomic_call(IrGenContext *ctx, Node *node) {
 static IrValue gen_func_call(IrGenContext *ctx, Node *node) {
     View name = node->ast.call_function.name;
 
-    if(view_equals(name, (View){ "__syscall_builtin", 17 })) return gen_atomic_call(ctx, node);
+    if(view_equals(name, (View){ "__atomic", 8 })) return gen_atomic_call(ctx, node);
 
 
     int func_id = lookup_func_id(ctx, name);

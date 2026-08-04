@@ -1,7 +1,7 @@
 #include "typecheck.h"
 
 static void check_var_decl(CheckContext *ctx, Node *node);
-static TypecheckType resolve_type_spec(CheckContext *ctx, TypeSpec spec);
+static TypecheckType resolve_type_spec(CheckContext *ctx, TypeSpec spec, Node *node);
 static TypecheckType check_func_call(CheckContext *ctx, Node *node);
 static TypecheckType check_field_access(CheckContext *ctx, Node *node);
 
@@ -210,7 +210,7 @@ static AggregateDef* compute_aggregate_layout(CheckContext *ctx, Node *node) {
 
     for(size_t i = 0; i < members->count; ++i) {
         Node* field = members->items[i];
-        TypecheckType field_t = resolve_type_spec(ctx, field->ast.decl_variable.type);
+        TypecheckType field_t = resolve_type_spec(ctx, field->ast.decl_variable.type, field);
         size_t field_size = type_size(ctx, field_t);
 
         def->fields[i].name = field->ast.decl_variable.name;
@@ -523,7 +523,7 @@ static void check_newtype_decl(CheckContext *ctx, Node *node) {
         return;
     }
 
-    TypecheckType underlying = resolve_type_spec(ctx, node->ast.newtype.underlying);
+    TypecheckType underlying = resolve_type_spec(ctx, node->ast.newtype.underlying, node);
 
     TypeEntry* entry = (TypeEntry*)arena_alloc(ctx->arena, sizeof(TypeEntry));
     entry->name = name;
@@ -600,7 +600,7 @@ static void apply_array_info(TypecheckType *type, TypeSpec spec) {
     }
 }
 
-static TypecheckType resolve_type_spec(CheckContext *ctx, TypeSpec spec) {
+static TypecheckType resolve_type_spec(CheckContext *ctx, TypeSpec spec, Node *node) {
     if(spec.base != IDENTIFIER) {
         TypecheckType type = make_type(spec.base, spec.ptr_lvl);
         apply_array_info(&type, spec);
@@ -636,6 +636,11 @@ static TypecheckType resolve_type_spec(CheckContext *ctx, TypeSpec spec) {
 
     if(entry->kind == TYPE_ENTRY_AGGREGATE) {
         type.inline_def = &entry->aggregate;
+    }
+
+    if(type.base == KLINK && type.ptr_lvl > 0) {
+        diag_error(ctx->context, node->filename, node->line, node->col, 
+            "Variaveis do tipo link nao podem ser ponteiros nem arrays");
     }
 
     apply_array_info(&type, spec);
@@ -994,7 +999,7 @@ static void check_var_decl(CheckContext *ctx, Node *node) {
         }
     }
 
-    TypecheckType declared = resolve_type_spec(ctx, node->ast.decl_variable.type);
+    TypecheckType declared = resolve_type_spec(ctx, node->ast.decl_variable.type, node);
     if(type_is_error(declared)) {
         diag_error(ctx->context, node->filename, node->line, node->col,
             "tipo nao declarado para '%.*s'", (int)name.len, name.start);
@@ -1048,7 +1053,7 @@ static void check_func_decl(CheckContext *ctx, Node *node) {
     View name = node->ast.decl_function.name;
     bool has_body = (node->ast.decl_function.body != NULL);
 
-    TypecheckType call_type = resolve_type_spec(ctx, node->ast.decl_function.call_type);
+    TypecheckType call_type = resolve_type_spec(ctx, node->ast.decl_function.call_type, node);
     if(type_is_error(call_type)) {
         diag_error(ctx->context, node->filename, node->line, node->col, 
             "tipo de retorno nao declarado para '%.*s'", (int)name.len, name.start); 
@@ -1059,7 +1064,7 @@ static void check_func_decl(CheckContext *ctx, Node *node) {
 
     for(size_t i = 0; i < params->count; ++i) {
         Node* param = params->items[i];
-        param_t[i] = resolve_type_spec(ctx, param->ast.decl_variable.type);
+        param_t[i] = resolve_type_spec(ctx, param->ast.decl_variable.type, node);
         param->resolved_type = param_t[i];
     }
 
