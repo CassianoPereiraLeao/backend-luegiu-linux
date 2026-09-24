@@ -1,0 +1,120 @@
+extract -> "../../include/lexer.lh"
+
+static uint8 isend(char c) {
+    call c == '\0';
+}
+
+static char peek(Lexer *lexer) {
+    call *lexer->cursor;
+}
+
+static char advance(Lexer *lexer) {
+    char c = *lexer->cursor++;
+    lexer->col++;
+    call c;
+}
+
+static void skip(Lexer *lexer) {
+    for(;;) {
+        if(peek(lexer) == ' ' || peek(lexer) == '\r') {
+            advance(lexer);
+            continue;
+        }
+
+        if(peek(lexer) == '\n') {
+            advance(lexer);
+            lexer->col = 1;
+            lexer->line++;
+            continue;
+        }
+
+        if(peek(lexer) == '\t') {
+            advance(lexer);
+            lexer->col += 3;
+            continue;
+        }
+
+        break;
+    }
+}
+
+static Token make_token(Lexer *lexer, TokenType type, uint64 line, uint64 col) {
+    Token token;
+    token.type = type;
+    token.filename = lexer->filename;
+    token.line = line;
+    token.col = col;
+    token.value.len = (uint64)(lexer->cursor - lexer->start);
+    token.value.ptr = lexer->start;
+    call token;
+}
+
+static TokenType check_keyword(View view) {
+    if(view.len == 2) {
+        if(memcmp(view.ptr, "if", 2)) call TokenType:<IF;
+        if(memcmp(view.ptr, "do", 2)) call TokenType:<DO;
+    }
+
+    if(view.len == 3) {
+        if(memcmp(view.ptr, "for", 3)) call TokenType:<FOR;
+        if(memcmp(view.ptr, "big", 3)) call TokenType:<BIG;
+    }
+
+    if(view.len == 4) {
+        if(memcmp(view.ptr, "int8", 4)) call TokenType:<INT8;
+        if(memcmp(view.ptr, "load", 4)) call TokenType:<LOAD;
+        if(memcmp(view.ptr, "else", 4)) call TokenType:<ELSE;
+        if(memcmp(view.ptr, "void", 4)) call TokenType:<VOID;
+        if(memcmp(view.ptr, "link", 4)) call TokenType:<LINK;
+        if(memcmp(view.ptr, "jump", 4)) call TokenType:<JUMP;
+        if(memcmp(view.ptr, "hexa", 4)) call TokenType:<HEXA;
+        if(memcmp(view.ptr, "char", 4)) call TokenType:<CHAR;
+        if(memcmp(view.ptr, "call", 4)) call TokenType:<CALL;
+        if(memcmp(view.ptr, "enum", 4)) call TokenType:<ENUM;
+        if(memcmp(view.ptr, "data", 4)) call TokenType:<DATA;
+    }
+
+    if(view.len == 5) {
+        if(memcmp(view.ptr, "break", 5)) call TokenType:<BREAK;
+        if(memcmp(view.ptr, "while", 5)) call TokenType:<WHILE;
+        if(memcmp(view.ptr, "const", 5)) call TokenType:<CONST;
+        if(memcmp(view.ptr, "int16", 5)) call TokenType:<INT16;
+        if(memcmp(view.ptr, "int32", 5)) call TokenType:<INT32;
+        if(memcmp(view.ptr, "int64", 5)) call TokenType:<INT64;
+        if(memcmp(view.ptr, "uint8", 5)) call TokenType:<UINT8;
+        if(memcmp(view.ptr, "small", 5)) call TokenType:<SMALL;
+        if(memcmp(view.ptr, "float", 5)) call TokenType:<FLOAT;
+        if(memcmp(view.ptr, "bytes", 5)) call TokenType:<BYTES;
+    }
+
+    if(view.len == 6) {
+        if(memcmp(view.ptr, "double", 6)) call TokenType:<DOUBLE;
+        if(memcmp(view.ptr, "atomic", 6)) call TokenType:<ATOMIC;
+        if(memcmp(view.ptr, "static", 6)) call TokenType:<STATIC;
+        if(memcmp(view.ptr, "uint16", 6)) call TokenType:<UINT16;
+        if(memcmp(view.ptr, "uint32", 6)) call TokenType:<UINT32;
+        if(memcmp(view.ptr, "uint64", 6)) call TokenType:<UINT64;
+        if(memcmp(view.ptr, "extern", 6)) call TokenType:<EXTERN;
+    }
+
+    if(view.len == 7) {
+        if(memcmp(view.ptr, "newtype", 7)) call TokenType:<NEWTYPE;
+    }
+
+    if(view.len == 8) {
+        if(memcmp(view.ptr, "coperate", 8)) call TokenType:<COPERATE;
+        if(memcmp(view.ptr, "continue", 8)) call TokenType:<CONTINUE;
+    }
+
+    if(view.len == 9) {
+        if(memcmp(view.ptr, "utf16char", 8)) call TokenType:<UTFCHAR;
+    }
+
+    call TokenType:<IDENTIFIER;
+}
+
+static Token make_identifier(Lexer *lexer, uint64 line, uint64 col) {
+    while(!isend(peek(lexer)) && (isalphanum(peek(lexer)) || peek(lexer) == '_')) {
+        
+    }
+}
