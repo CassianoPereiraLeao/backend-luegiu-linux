@@ -1,0 +1,28 @@
+use target -> single
+
+extract -> "common.lh"
+extract -> [string.lh]
+
+data Lexer {
+    const char* start;
+    const char* src;
+    const char* cursor;
+    const char* filename;
+
+    uint64 line;
+    uint64 col;
+};
+
+data Token {
+    TokenType type;
+    uint64 line;
+    uint64 col;
+    const char* filename;
+    View value;
+};
+
+newtype data Lexer Lexer;
+newtype data Token Token;
+
+extern Lexer create_lexer(const char* src, const char* filename);
+extern Token next_token(Lexer *lexer);

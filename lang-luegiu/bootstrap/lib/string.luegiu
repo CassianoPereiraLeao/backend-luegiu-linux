@@ -1,0 +1,5 @@
+extract -> [string.lh]
+
+char* tolower(const char* string) {
+    
+}

@@ -1,0 +1,83 @@
+extract -> "../include/common.lh"
+extract -> "../include/lexer.lh"
+
+preprocess PERMISSIONS -> 0644
+preprocess AT_FDCWD -> -100
+preprocess FREAD -> 1 << 0
+preprocess FWRITE -> 1 << 1
+preprocess FREAD_WRITE -> 1 << 2
+preprocess FCREATE -> 1 << 6
+preprocess FEXCLUSIVE -> 1 << 7
+preprocess FTRUNCATE -> 1 << 9
+preprocess FAPPEND -> 1 << 10
+preprocess FNONBLOCK -> 1 << 11
+preprocess DIRECT -> 1 << 14
+preprocess LARGE -> 1 << 15
+preprocess FDIRECTORY -> 1 << 16
+preprocess FNOFOLLOW -> 1 << 17
+preprocess FCLOEXEC -> 1 << 19
+
+enum ExitCalls {
+    SUCCESS,
+    FAILURE
+};
+
+enum SysCalls {
+    READ,
+    WRITE,
+    OPEN,
+    CLOSE,
+    OPENAT = 257
+};
+
+data FOPEN {
+    char* ptr;
+    int32 cont;
+    char* base;
+    int32 flag;
+    int32 fd;
+    int buffer_size;
+};
+
+newtype enum ExitCalls ExitCalls;
+newtype enum SysCalls SysCalls;
+newtype data FOPEN FOPEN;
+
+uint64 strlen(const char* src) {
+    uint64 index = 0;
+
+    while(src[index]) index++;
+
+    call index;
+}
+
+hexa end(ExitCalls code) {
+    if(code == ExitCalls:<FAILURE) call 0x01;
+
+    call 0x00;
+}
+
+void write(int32 fd, const char* buffer, uint64 len) {
+    SysCalls syscall = SysCalls:<WRITE;
+    __syscall_builtin(syscall, fd, buffer, len, 0, 0, 0);
+}
+
+uint64 openat(int32 dfd, const char* filepath, uint64 flags, uint64 permission) {
+    SysCalls syscall = SysCalls:<OPENAT;
+    call __syscall_builtin(syscall, dfd, filepath, flags, permission, 0, 0);
+}
+
+void close(uint64 fd) {
+    SysCalls syscall = SysCalls:<CLOSE;
+    __syscall_builtin(syscall, fd, 0, 0, 0, 0, 0);
+}
+
+link start(void) {
+    const char* str = "Eai\n";
+
+    uint64 fd = openat(AT_FDCWD, "./from_me.asm", FWRITE | FCREATE | FTRUNCATE, PERMISSIONS);
+    write(fd, str, strlen(str));
+    close(fd);
+
+    call end(ExitCalls:<SUCCESS);
+}

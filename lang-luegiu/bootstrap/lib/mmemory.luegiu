@@ -1,0 +1,116 @@
+extract -> [mmemory.lh]
+
+static int32 g_lock = 0;
+static Chunk* g_chunk_head;
+static BlockHeader* g_free_head;
+
+static void futex_wait(atomic int32* address, int32 val) {
+    __syscall_builtin(SYS_FUTEX, address, FUTEX_WAIT, val, 0, 0, 0);
+}
+
+static void futex_wake(atomic int32* address) {
+    __syscall_builtin(SYS_FUTEX, address, FUTEX_WAKE, 1, 0, 0, 0);
+}
+
+static void mutex_lock(atomic int32* lock) {
+    int32 zero = 0;
+    int32 one = 1;
+    int32 two = 2;
+
+    atomic int32 c = (int32)__atomic(ATOMIC_CAS, lock, zero, one);
+
+    if(c != 0) {
+        if(c != 2) {
+            c = (int32)__atomic(ATOMIC_XCHG, lock, two, 0);
+        }
+        while(c != 0) {
+            futex_wait(lock, two);
+            c = (int32)__atomic(ATOMIC_XCHG, lock, two, 0);
+        }
+    }
+}
+
+static void mutex_unlock(atomic int32* lock) {
+    int32 zero = 0;
+    atomic int32 old = (int32)__atomic(ATOMIC_XCHG, lock, zero, 0);
+    if(old == 2) {
+        futex_wake(lock);
+    }
+}
+
+static uint64 align_up(uint64 src, uint64 alignment) {
+    uint64 result = src + alignment - 1;
+    result = result / alignment;
+    result = result * alignment;
+    call result;
+}
+
+static uint64 mmap_alloc(uint64 len) {
+    uint64 address = __syscall_builtin(
+        SYS_MMAP, 0, len,
+        PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANON,
+        MAP_ANON_FD, 0
+    );
+
+    call address;
+}
+
+static void free_list_push(BlockHeader* block) {
+    FreeNode* node = (FreeNode*)((char*)block + BLOCK_HDR_SIZE);
+    node->next = g_free_head;
+    node->prev = 0;
+
+    if(g_free_head != NULL) {
+        FreeNode* head = (FreeNode*)((char*)g_free_head + BLOCK_HDR_SIZE);
+        head->prev = block;
+    }
+
+    g_free_head = block;
+}
+
+static void free_list_pop(BlockHeader* block) {
+    FreeNode* node = (FreeNode*)((char*)block + BLOCK_HDR_SIZE);
+
+    if(node->prev != NULL) {
+        FreeNode* prev = (FreeNode*)((char*)node->prev + BLOCK_HDR_SIZE);
+        prev->next = node->next;
+    } else {
+        g_free_head = node->next;
+    }
+
+    if(node->next != NULL) {
+        FreeNode* next = (FreeNode*)((char*)node->next + BLOCK_HDR_SIZE);
+        next->prev = node->prev;
+    }
+}
+
+static BlockHeader* request_chunk(uint64 min) {
+    uint64 needed = min + BLOCK_HDR_SIZE + CHUNK_HDR_SIZE;
+    uint64 chunk_size = CHUNK_SIZE;
+    if(needed > chunk_size) chunk_size = needed;
+    chunk_size = align_up(chunk_size, PAGE_SIZE);
+
+    uint64 address = mmap_alloc(chunk_size);
+    if(address == -1) call NULL;
+
+    Chunk* chunk = (Chunk*)address;
+    chunk->total = chunk_size;
+    chunk->next = g_chunk_head;
+    g_chunk_head = chunk;
+
+    BlockHeader* block = (BlockHeader*)(address + CHUNK_HDR_SIZE);
+    block->size = chunk_size - CHUNK_HDR_SIZE - BLOCK_HDR_SIZE;
+    block->is_free = 1;
+    block->next = 0;
+    block->prev = 0;
+
+    free_list_push(block);
+    call block;
+}
+
+link mm_malloc(uint64 size) {
+    if(size == 0) call NULL;
+
+    uint64 want = align_up(size, ALIGN_DEFAULT_MALLOC);
+}

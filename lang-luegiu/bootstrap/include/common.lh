@@ -1,0 +1,43 @@
+use target -> single
+
+extract -> [mmemory.lh]
+
+data View {
+    const char* ptr;
+    uint64 len;
+};
+
+enum TokenType {
+    EOF, UNDEFINED,
+
+    IDENTIFIER, STRING_LIT, HEXA_LIT, BIG_LIT,
+    INT_LIT, FLOAT_LIT, DOUBLE_LIT, UNSIGNED_LIT, 
+    CHAR_LIT,
+    
+    OPEN_PAREN, CLOSE_PAREN,
+    OPEN_BRACKET, CLOSE_BRACKET,
+    OPEN_BRACE, CLOSE_BRACE,
+
+    COLON, SEMICOLON, ELLIPSES, COMMA, DOT,
+
+    LSHIFT, RSHIFT, PLUS, PLUS_PLUS,
+    MINUS, MINUS_MINUS, NOD, SLASH,
+    BANG, XOR, AND, OR, GT, GE, LT, LE,
+    STAR,
+
+    ARROW, DESC, ASSIGN, EQUALS,
+    LSHIFTE, RSHIFTE, SLASHE, MODE,
+    LAND, LOR, TERN, ANDE,
+    XORE, ORE, BANGE, STAREQ,
+    
+    DATA, ENUM, COPERATE, NEWTYPE, WHILE, FOR,
+    DO, IF, ELSE, CONST, STATIC, ATOMIC, LOAD,
+    CALL, BREAK, CONTINUE, JUMP, EXTERN, BYTES,
+
+    VOID, SMALL, LINK, HEXA, CHAR, UTFCHAR,
+    FLOAT, DOUBLE, BIG, UINT8, UINT16,
+    UINT32, UINT64, INT8, INT16, INT32, INT64
+};
+
+newtype data View View;
+newtype enum TokenType TokenType;
