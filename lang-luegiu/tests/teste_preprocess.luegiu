@@ -1,0 +1,6 @@
+extract -> "luegiu.lh"
+preprocess NULL -> 0
+
+uint8 program() {
+    NULL;
+}

@@ -1,0 +1,32 @@
+enum Data {
+    INTEGER = 1 << 2,
+};
+
+data Cap {
+    int8 forwhile;
+};
+
+coperate Union {
+    int8 forwhile;
+};
+
+newtype data Cap Cap;
+newtype coperate Union Union;
+
+int8 func(const atomic int8 resource) {
+    enum Data rabisco;
+    data Enum petisco;
+    coperate Union petisco;
+
+    Data:<OK;
+
+    foo(x);
+
+    if(x == 0) {
+        
+    } else {
+
+    }
+
+    if(k == 22) x = 0;
+}

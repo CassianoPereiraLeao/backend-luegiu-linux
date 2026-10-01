@@ -1,0 +1,13 @@
+use target -> single
+
+enum Cromo {
+    CRT
+};
+
+data Foo {
+    uint8 age;
+    data Foo* next;
+};
+
+newtype enum Cromo Cromo;
+newtype data Foo Foo;

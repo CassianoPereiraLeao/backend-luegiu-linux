@@ -1,0 +1,22 @@
+extract -> "luegiu.lh"
+preprocess NULL -> 0
+
+static int8 VAR = 0;
+
+int64 soma(int32 a, int32 b) {
+    call a + b;
+}
+
+link start(int argc, char** argv) {
+    Foo foo;
+
+    foo.age = 128;
+    foo.next->age = ~8;
+
+    foo.age = bytes(int64);
+
+    const char* ok = "ok";
+    float x = 2.0f;
+
+    call 0xFF;
+}

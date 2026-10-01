@@ -1,0 +1,57 @@
+use target -> single
+
+extract -> [bounds.lh]
+
+preprocess KB -> 1024
+preprocess MB -> (KB * KB)
+
+preprocess SYS_MMAP -> 9
+preprocess SYS_MUNMAP -> 11
+preprocess SYS_FUTEX -> 202
+
+preprocess PROT_READ -> 1
+preprocess PROT_WRITE -> 2
+preprocess MAP_PRIVATE -> 0x02
+preprocess MAP_ANON -> 0x20
+preprocess MAP_ANON_FD -> -1
+
+preprocess FUTEX_WAIT -> 0
+preprocess FUTEX_WAKE -> 1
+
+preprocess ATOMIC_FENCE -> 1
+preprocess ATOMIC_CAS -> 2
+preprocess ATOMIC_LOAD -> 3
+preprocess ATOMIC_STORE -> 4
+preprocess ATOMIC_XCHG -> 5
+
+preprocess PAGE_SIZE -> (4 * KB)
+preprocess CHUNK_SIZE -> MB
+preprocess ALIGN_DEFAULT_MALLOC -> 16
+
+preprocess CHUNK_HDR_SIZE -> 16
+preprocess BLOCK_HDR_SIZE -> 32
+preprocess FREE_SIZE -> 16
+
+data Chunk {
+    uint64 total;
+    data Chunk* next;
+};
+
+data BlockHeader {
+    uint64 size;
+    uint64 is_free;
+    data BlockHeader* next;
+    data BlockHeader* prev;
+};
+
+data FreeNode {
+    BlockHeader* next;
+    BlockHeader* prev;
+};
+
+newtype data Chunk Chunk;
+newtype data BlockHeader BlockHeader;
+newtype data FreeNode FreeNode;
+
+extern uint8 memcmp(link src1, link src2, uint64 len);
+extern uint64 memcopy(link dest, link src, uint64 len);

@@ -1,0 +1,14 @@
+use target -> single
+
+preprocess NULLTERMINATOR -> '\0'
+preprocess TAB -> '\t'
+preprocess NEWLINE -> '\n'
+preprocess CARRYRETURN -> '\r'
+preprocess BACKSLASH -> '\\'
+
+extern uint8 isalpha(char c);
+extern uint8 isnumeric(char c);
+extern uint8 isalphanum(char c);
+
+extern char* tolower(const char* string);
+extern char* toupper(const char* string);

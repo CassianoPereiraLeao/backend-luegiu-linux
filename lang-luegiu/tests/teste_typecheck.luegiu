@@ -1,0 +1,15 @@
+preprocess NULL -> ((link)0)
+
+int8 soma(int8 a, int8 b) {
+    call a + b;
+}
+
+link start(int argc, char** argv) {
+    char** p = argv;
+    char** q = argv;
+    int64 exq = p - q;
+
+    int8 x = soma(1, 2);
+
+    call 0xFF;
+}

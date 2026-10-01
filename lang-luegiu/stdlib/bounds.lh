@@ -1,0 +1,12 @@
+use target -> single
+
+preprocess NULL -> ((link)0)
+
+preprocess VARCHAR -> 256
+preprocess PATHCHAR -> 512
+preprocess BASESTRING -> 1024
+
+preprocess UINT8_CAP -> 255
+preprocess UINT16_CAP -> 65535
+preprocess UINT32_CAP -> 4294967295
+preprocess UINT64_CAP -> 18446744073709551615
